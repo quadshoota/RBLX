@@ -136,6 +136,22 @@ function Utilities:AddRippleEffect(Button, RippleColor)
     end)
 end
 
+function Utilities:CreateShadow(Parent, Transparency, Size)
+    local Shadow = self:Create("Frame", {
+        Name = "Shadow",
+        BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+        BackgroundTransparency = Transparency or 0.5,
+        Size = UDim2.new(1, Size or 20, 1, Size or 20),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        ZIndex = 0,
+        Parent = Parent
+    })
+    
+    self:SetRounded(Shadow, 12)
+    return Shadow
+end
+
 -- Enhanced color scheme
 local Colors = {
     Primary = Color3.fromRGB(24, 24, 24),               -- Darker background
@@ -185,10 +201,6 @@ function library:Window(WindowArgs)
                 }),
                 Offset = Vector2.new(0, 0.65),
                 Rotation = 90
-            }),
-            Utilities:Create("UIShadow", {  -- Add shadow for depth
-                Transparency = 0.7,
-                Blur = 15
             }),
             Utilities:Create("Frame", {
                 Name = "Containers",
@@ -283,6 +295,9 @@ function library:Window(WindowArgs)
     -- Add corner radius to main window
     Utilities:SetRounded(Window.Main, 8)
     
+    -- Add a shadow behind the main window for depth
+    Utilities:CreateShadow(Window.Main, 0.75, 20)
+    
     -- Add toggle key handler (Alt key to toggle UI)
     UserInputService.InputBegan:Connect(function(Input, GameProcessed)
         if Input.KeyCode == Enum.KeyCode.LeftAlt and not GameProcessed then
@@ -369,6 +384,9 @@ function library:Window(WindowArgs)
     -- Add rounded corners to console
     Utilities:SetRounded(Console, 8)
     Utilities:SetRounded(Console.ConsoleContainer, 4)
+    
+    -- Add shadow to console
+    Utilities:CreateShadow(Console, 0.75, 15)
     
     -- Console close button handler
     Console.ConsoleTopbar.CloseButton.MouseButton1Click:Connect(function()
