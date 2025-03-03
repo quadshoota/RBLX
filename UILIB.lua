@@ -1,1959 +1,2083 @@
--- Nova UI Library
--- A lightweight, reliable UI library for Roblox scripts
+--[[
+    Celestial Interface Suite
+    A beautiful, fluent UI library for Roblox experiences.
+    
+    Author: YourName
+    License: MIT
+    GitHub: https://github.com/yourusername/Celestial
+--]]
 
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local TextService = game:GetService("TextService")
+-- LOCAL MODULE DEFINITIONS
+local Celestial = {}
+local Acrylic = {}
+local Creator = {}
+local Components = {}
+local Elements = {}
+local Themes = {Names = {"Dark", "Darker", "Light", "Aqua", "Amethyst", "Rose"}}
+local Flipper = {} -- Animation Engine
+
+-- SERVICES
+local LightingService = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
+local PlayersService = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local WorkspaceCamera = game:GetService("Workspace").CurrentCamera
+local LocalPlayer = PlayersService.LocalPlayer
+local PlayerMouse = LocalPlayer:GetMouse()
 
-local NovaLibrary = {}
-local NovaUI = {}
-NovaUI.__index = NovaUI
+--//////////////////////////////////////////////////////////////////////////////////--
+--                                   FLIPPER ENGINE                                 --
+--//////////////////////////////////////////////////////////////////////////////////--
 
--- Constants
-local TWEEN_SPEED = 0.25
-local FONT_SIZE = 14
-local DEFAULT_FONT = Font.new("rbxasset://fonts/families/GothamSSm.json")
+-- Animation Engine based on Flipper
+do
+    -- Signal implementation
+    local Signal = {}
+    Signal.__index = Signal
 
--- Themes
-NovaLibrary.Themes = {
-    Dark = {
-        Background = Color3.fromRGB(30, 30, 35),
-        Container = Color3.fromRGB(40, 40, 45),
-        Button = Color3.fromRGB(45, 45, 50),
-        ButtonHover = Color3.fromRGB(55, 55, 60),
-        Text = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(180, 180, 180),
-        Accent = Color3.fromRGB(100, 120, 255),
-        Border = Color3.fromRGB(60, 60, 65),
-        Slider = Color3.fromRGB(70, 70, 75),
-        Toggle = Color3.fromRGB(50, 50, 55),
-        ToggleAccent = Color3.fromRGB(100, 120, 255),
-        Dropdown = Color3.fromRGB(45, 45, 50),
-        DropdownOption = Color3.fromRGB(50, 50, 55),
-    },
-    Light = {
-        Background = Color3.fromRGB(240, 240, 245),
-        Container = Color3.fromRGB(230, 230, 235),
-        Button = Color3.fromRGB(220, 220, 225),
-        ButtonHover = Color3.fromRGB(210, 210, 215),
-        Text = Color3.fromRGB(30, 30, 35),
-        SubText = Color3.fromRGB(80, 80, 85),
-        Accent = Color3.fromRGB(80, 100, 230),
-        Border = Color3.fromRGB(200, 200, 205),
-        Slider = Color3.fromRGB(200, 200, 205),
-        Toggle = Color3.fromRGB(220, 220, 225),
-        ToggleAccent = Color3.fromRGB(80, 100, 230),
-        Dropdown = Color3.fromRGB(220, 220, 225),
-        DropdownOption = Color3.fromRGB(210, 210, 215),
-    },
-    Ocean = {
-        Background = Color3.fromRGB(20, 30, 40),
-        Container = Color3.fromRGB(30, 40, 55),
-        Button = Color3.fromRGB(35, 45, 60),
-        ButtonHover = Color3.fromRGB(45, 55, 70),
-        Text = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(180, 190, 200),
-        Accent = Color3.fromRGB(65, 145, 225),
-        Border = Color3.fromRGB(45, 55, 70),
-        Slider = Color3.fromRGB(50, 60, 75),
-        Toggle = Color3.fromRGB(40, 50, 65),
-        ToggleAccent = Color3.fromRGB(65, 145, 225),
-        Dropdown = Color3.fromRGB(35, 45, 60),
-        DropdownOption = Color3.fromRGB(40, 50, 65),
-    },
-    Crimson = {
-        Background = Color3.fromRGB(40, 25, 30),
-        Container = Color3.fromRGB(50, 30, 35),
-        Button = Color3.fromRGB(60, 35, 40),
-        ButtonHover = Color3.fromRGB(70, 40, 45),
-        Text = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(200, 180, 180),
-        Accent = Color3.fromRGB(225, 65, 85),
-        Border = Color3.fromRGB(70, 45, 50),
-        Slider = Color3.fromRGB(75, 50, 55),
-        Toggle = Color3.fromRGB(65, 40, 45),
-        ToggleAccent = Color3.fromRGB(225, 65, 85),
-        Dropdown = Color3.fromRGB(60, 35, 40),
-        DropdownOption = Color3.fromRGB(65, 40, 45),
-    }
-}
+    function Signal.new()
+        return setmetatable({_connections = {}, _threads = {}}, Signal)
+    end
 
--- Utility Functions
-local function Create(instanceType)
-    return function(properties, children)
-        local instance = Instance.new(instanceType)
+    function Signal:fire(...)
+        for _, connection in pairs(self._connections) do
+            connection._handler(...)
+        end
         
-        for property, value in pairs(properties or {}) do
+        for _, thread in pairs(self._threads) do
+            coroutine.resume(thread, ...)
+        end
+        
+        self._threads = {}
+    end
+
+    function Signal:connect(callback)
+        local connection = {
+            signal = self, 
+            connected = true, 
+            _handler = callback
+        }
+        
+        table.insert(self._connections, connection)
+        
+        function connection:disconnect()
+            if self.connected then
+                self.connected = false
+                for i, conn in pairs(self.signal._connections) do
+                    if conn == self then
+                        table.remove(self.signal._connections, i)
+                        return
+                    end
+                end
+            end
+        end
+        
+        return connection
+    end
+
+    function Signal:wait()
+        table.insert(self._threads, coroutine.running())
+        return coroutine.yield()
+    end
+    
+    -- Base Motor class
+    local BaseMotor = {}
+    BaseMotor.__index = BaseMotor
+
+    function BaseMotor.new()
+        return setmetatable({
+            _onStep = Signal.new(),
+            _onStart = Signal.new(),
+            _onComplete = Signal.new()
+        }, BaseMotor)
+    end
+
+    function BaseMotor:onStep(callback)
+        return self._onStep:connect(callback)
+    end
+
+    function BaseMotor:onStart(callback)
+        return self._onStart:connect(callback)
+    end
+
+    function BaseMotor:onComplete(callback)
+        return self._onComplete:connect(callback)
+    end
+
+    function BaseMotor:start()
+        if not self._connection then
+            self._connection = RunService.RenderStepped:Connect(function(deltaTime)
+                self:step(deltaTime)
+            end)
+        end
+    end
+
+    function BaseMotor:stop()
+        if self._connection then
+            self._connection:Disconnect()
+            self._connection = nil
+        end
+    end
+
+    BaseMotor.destroy = BaseMotor.stop
+    BaseMotor.step = function() end
+    BaseMotor.getValue = function() end
+    BaseMotor.setGoal = function() end
+
+    function BaseMotor:__tostring()
+        return "Motor"
+    end
+
+    -- Single Motor (animates a single value)
+    local SingleMotor = setmetatable({}, BaseMotor)
+    SingleMotor.__index = SingleMotor
+
+    function SingleMotor.new(initialValue, useImplicitConnections)
+        assert(initialValue, "Missing argument #1: initialValue")
+        assert(typeof(initialValue) == "number", "initialValue must be a number!")
+        
+        local self = setmetatable(BaseMotor.new(), SingleMotor)
+        
+        self._useImplicitConnections = useImplicitConnections ~= nil and useImplicitConnections or true
+        self._goal = nil
+        self._state = {complete = true, value = initialValue}
+        
+        return self
+    end
+
+    function SingleMotor:step(deltaTime)
+        if self._state.complete then
+            return true
+        end
+        
+        local newState = self._goal:step(self._state, deltaTime)
+        self._state = newState
+        self._onStep:fire(newState.value)
+        
+        if newState.complete then
+            if self._useImplicitConnections then
+                self:stop()
+            end
+            self._onComplete:fire()
+        end
+        
+        return newState.complete
+    end
+
+    function SingleMotor:getValue()
+        return self._state.value
+    end
+
+    function SingleMotor:setGoal(goal)
+        self._state.complete = false
+        self._goal = goal
+        self._onStart:fire()
+        
+        if self._useImplicitConnections then
+            self:start()
+        end
+    end
+
+    function SingleMotor:__tostring()
+        return "Motor(Single)"
+    end
+
+    -- Group Motor (animates multiple values)
+    local GroupMotor = setmetatable({}, BaseMotor)
+    GroupMotor.__index = GroupMotor
+    
+    -- Motor detection helper
+    local isMotor = function(obj)
+        local objType = tostring(obj):match("^Motor%((.+)%)$")
+        if objType then
+            return true, objType
+        else
+            return false
+        end
+    end
+    
+    -- Motor conversion helper
+    local function createMotor(value)
+        if isMotor(value) then
+            return value
+        end
+        
+        local valueType = typeof(value)
+        if valueType == "number" then
+            return SingleMotor.new(value, false)
+        elseif valueType == "table" then
+            return GroupMotor.new(value, false)
+        end
+        
+        error(("Unable to convert %q to motor; type %s is unsupported"):format(value, valueType), 2)
+    end
+
+    function GroupMotor.new(initialValues, useImplicitConnections)
+        assert(initialValues, "Missing argument #1: initialValues")
+        assert(typeof(initialValues) == "table", "initialValues must be a table!")
+        assert(not initialValues.step, [[initialValues contains disallowed property "step". Did you mean to put a table of values here?]])
+        
+        local self = setmetatable(BaseMotor.new(), GroupMotor)
+        
+        if useImplicitConnections ~= nil then
+            self._useImplicitConnections = useImplicitConnections
+        else
+            self._useImplicitConnections = true
+        end
+        
+        self._complete = true
+        self._motors = {}
+        
+        for key, value in pairs(initialValues) do
+            self._motors[key] = createMotor(value)
+        end
+        
+        return self
+    end
+
+    function GroupMotor:step(deltaTime)
+        if self._complete then
+            return true
+        end
+        
+        local allComplete = true
+        for _, motor in pairs(self._motors) do
+            local complete = motor:step(deltaTime)
+            if not complete then
+                allComplete = false
+            end
+        end
+        
+        self._onStep:fire(self:getValue())
+        
+        if allComplete then
+            if self._useImplicitConnections then
+                self:stop()
+            end
+            self._complete = true
+            self._onComplete:fire()
+        end
+        
+        return allComplete
+    end
+
+    function GroupMotor:setGoal(goals)
+        assert(not goals.step, [[goals contains disallowed property "step". Did you mean to put a table of goals here?]])
+        
+        self._complete = false
+        self._onStart:fire()
+        
+        for key, goal in pairs(goals) do
+            local motor = assert(self._motors[key], ("Unknown motor for key %s"):format(key))
+            motor:setGoal(goal)
+        end
+        
+        if self._useImplicitConnections then
+            self:start()
+        end
+    end
+
+    function GroupMotor:getValue()
+        local values = {}
+        for key, motor in pairs(self._motors) do
+            values[key] = motor:getValue()
+        end
+        return values
+    end
+
+    function GroupMotor:__tostring()
+        return "Motor(Group)"
+    end
+
+    -- Spring goal
+    local Spring = {}
+    Spring.__index = Spring
+
+    function Spring.new(targetValue, options)
+        assert(targetValue, "Missing argument #1: targetValue")
+        options = options or {}
+        
+        return setmetatable({
+            _targetValue = targetValue,
+            _frequency = options.frequency or 4,
+            _dampingRatio = options.dampingRatio or 1
+        }, Spring)
+    end
+
+    function Spring:step(state, deltaTime)
+        -- Adapted spring physics implementation
+        local d = self._dampingRatio
+        local f = self._frequency * 2 * math.pi
+        local g = self._targetValue
+        local p = state.value
+        local v = state.velocity or 0
+        
+        local offset = p - g
+        local decay = math.exp(-d * f * deltaTime)
+        
+        local position, velocity
+        
+        if d == 1 then -- Critically damped
+            position = (offset * (1 + f * deltaTime) + v * deltaTime) * decay + g
+            velocity = (v * (1 - f * deltaTime) - offset * (f * f * deltaTime)) * decay
+        elseif d < 1 then -- Underdamped
+            local c = math.sqrt(1 - d * d)
+            
+            local i = math.cos(f * c * deltaTime)
+            local j = math.sin(f * c * deltaTime)
+            
+            if c > 0.0001 then
+                j = j / c
+            else
+                j = deltaTime * f
+            end
+            
+            position = (offset * i + v * j) * decay + g
+            velocity = (v * i - offset * j * f) * decay
+        else -- Overdamped
+            local c = math.sqrt(d * d - 1)
+            
+            local r1 = -f * (d - c)
+            local r2 = -f * (d + c)
+            
+            local co2 = (v - offset * r1) / (2 * f * c)
+            local co1 = offset - co2
+            
+            local e1 = co1 * math.exp(r1 * deltaTime)
+            local e2 = co2 * math.exp(r2 * deltaTime)
+            
+            position = e1 + e2 + g
+            velocity = e1 * r1 + e2 * r2
+        end
+        
+        local complete = math.abs(velocity) < 0.001 and math.abs(position - g) < 0.001
+        
+        return {
+            complete = complete,
+            value = complete and g or position,
+            velocity = velocity
+        }
+    end
+
+    -- Instant goal (jumps to target immediately)
+    local Instant = {}
+    Instant.__index = Instant
+
+    function Instant.new(targetValue)
+        return setmetatable({_targetValue = targetValue}, Instant)
+    end
+
+    function Instant:step()
+        return {
+            complete = true,
+            value = self._targetValue
+        }
+    end
+
+    -- Linear goal (moves at constant velocity)
+    local Linear = {}
+    Linear.__index = Linear
+
+    function Linear.new(targetValue, options)
+        assert(targetValue, "Missing argument #1: targetValue")
+        options = options or {}
+        
+        return setmetatable({
+            _targetValue = targetValue,
+            _velocity = options.velocity or 1
+        }, Linear)
+    end
+
+    function Linear:step(state, deltaTime)
+        local currentValue = state.value
+        local velocity = self._velocity
+        local deltaValue = deltaTime * velocity
+        local targetValue = self._targetValue
+        
+        local reachedTarget = deltaValue >= math.abs(targetValue - currentValue)
+        
+        currentValue = currentValue + deltaValue * (targetValue > currentValue and 1 or -1)
+        
+        if reachedTarget then
+            currentValue = self._targetValue
+            velocity = 0
+        end
+        
+        return {
+            complete = reachedTarget,
+            value = currentValue,
+            velocity = velocity
+        }
+    end
+
+    -- Export the Flipper library
+    Flipper = {
+        SingleMotor = SingleMotor,
+        GroupMotor = GroupMotor,
+        Spring = Spring,
+        Instant = Instant,
+        Linear = Linear,
+        isMotor = isMotor
+    }
+end
+
+--//////////////////////////////////////////////////////////////////////////////////--
+--                                   CREATOR MODULE                                 --
+--//////////////////////////////////////////////////////////////////////////////////--
+
+do
+    -- Registry for themed objects
+    Creator.Registry = {}
+    
+    -- Signal connections for cleanup
+    Creator.Signals = {}
+    
+    -- Motors for transparency animations
+    Creator.TransparencyMotors = {}
+    
+    -- Default properties for common Instance types
+    Creator.DefaultProperties = {
+        ScreenGui = {
+            ResetOnSpawn = false,
+            ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        },
+        Frame = {
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderColor3 = Color3.new(0, 0, 0),
+            BorderSizePixel = 0
+        },
+        ScrollingFrame = {
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderColor3 = Color3.new(0, 0, 0),
+            ScrollBarImageColor3 = Color3.new(0, 0, 0)
+        },
+        TextLabel = {
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderColor3 = Color3.new(0, 0, 0),
+            Font = Enum.Font.SourceSans,
+            Text = "",
+            TextColor3 = Color3.new(0, 0, 0),
+            BackgroundTransparency = 1,
+            TextSize = 14
+        },
+        TextButton = {
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderColor3 = Color3.new(0, 0, 0),
+            AutoButtonColor = false,
+            Font = Enum.Font.SourceSans,
+            Text = "",
+            TextColor3 = Color3.new(0, 0, 0),
+            TextSize = 14
+        },
+        TextBox = {
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderColor3 = Color3.new(0, 0, 0),
+            ClearTextOnFocus = false,
+            Font = Enum.Font.SourceSans,
+            Text = "",
+            TextColor3 = Color3.new(0, 0, 0),
+            TextSize = 14
+        },
+        ImageLabel = {
+            BackgroundTransparency = 1,
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderColor3 = Color3.new(0, 0, 0),
+            BorderSizePixel = 0
+        },
+        ImageButton = {
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderColor3 = Color3.new(0, 0, 0),
+            AutoButtonColor = false
+        },
+        CanvasGroup = {
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderColor3 = Color3.new(0, 0, 0),
+            BorderSizePixel = 0
+        }
+    }
+
+    -- Apply theme properties to an object
+    local function applyThemeProperties(object, properties)
+        if properties.ThemeTag then
+            Creator.AddThemeObject(object, properties.ThemeTag)
+        end
+    end
+
+    -- Add a signal connection to the registry for cleanup
+    function Creator.AddSignal(signal, callback)
+        table.insert(Creator.Signals, signal:Connect(callback))
+    end
+
+    -- Disconnect all registered signals
+    function Creator.Disconnect()
+        for i = #Creator.Signals, 1, -1 do
+            local signal = table.remove(Creator.Signals, i)
+            signal:Disconnect()
+        end
+    end
+
+    -- Get a theme property value
+    function Creator.GetThemeProperty(property)
+        if Themes[Celestial.Theme][property] then
+            return Themes[Celestial.Theme][property]
+        end
+        return Themes.Dark[property]
+    end
+
+    -- Update all themed objects
+    function Creator.UpdateTheme()
+        for object, data in next, Creator.Registry do
+            for property, value in next, data.Properties do
+                object[property] = Creator.GetThemeProperty(value)
+            end
+        end
+        
+        for _, motor in next, Creator.TransparencyMotors do
+            motor:setGoal(Flipper.Instant.new(Creator.GetThemeProperty("ElementTransparency")))
+        end
+    end
+
+    -- Register an object to be themed
+    function Creator.AddThemeObject(object, properties)
+        local index = #Creator.Registry + 1
+        local data = {
+            Object = object,
+            Properties = properties,
+            Idx = index
+        }
+        
+        Creator.Registry[object] = data
+        Creator.UpdateTheme()
+        return object
+    end
+
+    -- Override theme properties on an object
+    function Creator.OverrideTag(object, properties)
+        Creator.Registry[object].Properties = properties
+        Creator.UpdateTheme()
+    end
+
+    -- Create a new Instance with properties and children
+    function Creator.New(className, properties, children)
+        local instance = Instance.new(className)
+        
+        -- Apply default properties for the class
+        for property, value in next, Creator.DefaultProperties[className] or {} do
             instance[property] = value
         end
         
-        for _, child in ipairs(children or {}) do
+        -- Apply custom properties
+        for property, value in next, properties or {} do
+            if property ~= "ThemeTag" then
+                instance[property] = value
+            end
+        end
+        
+        -- Add children
+        for _, child in next, children or {} do
             child.Parent = instance
         end
         
+        applyThemeProperties(instance, properties or {})
         return instance
     end
-end
 
-local function ApplyTheme(instance, themeColor, theme)
-    if theme and NovaLibrary.Themes[theme] and NovaLibrary.Themes[theme][themeColor] then
-        return NovaLibrary.Themes[theme][themeColor]
+    -- Create a spring-driven animation motor for properties
+    function Creator.SpringMotor(initialValue, object, property, skipThemeUpdates, isTransparency)
+        skipThemeUpdates = skipThemeUpdates or false
+        isTransparency = isTransparency or false
+        
+        local motor = Flipper.SingleMotor.new(initialValue)
+        
+        motor:onStep(function(value)
+            object[property] = value
+        end)
+        
+        if isTransparency then
+            table.insert(Creator.TransparencyMotors, motor)
+        end
+        
+        local setGoal = function(goal, ignoreCheck)
+            ignoreCheck = ignoreCheck or false
+            
+            if not skipThemeUpdates then
+                if not ignoreCheck then
+                    if property == "BackgroundTransparency" and Celestial.DialogOpen then
+                        return
+                    end
+                end
+            end
+            
+            motor:setGoal(Flipper.Spring.new(goal, {frequency = 8}))
+        end
+        
+        return motor, setGoal
     end
-    return instance
 end
 
-local function Tween(instance, properties, duration)
-    local tween = TweenService:Create(
-        instance,
-        TweenInfo.new(duration or TWEEN_SPEED, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-        properties
-    )
-    tween:Play()
-    return tween
-end
+--//////////////////////////////////////////////////////////////////////////////////--
+--                                  ACRYLIC MODULE                                  --
+--//////////////////////////////////////////////////////////////////////////////////--
 
-local function GetTextSize(text, fontSize, font)
-    return TextService:GetTextSize(text, fontSize or FONT_SIZE, font or DEFAULT_FONT, Vector2.new(1000, 1000))
-end
-
--- Main UI Creation
-function NovaLibrary.new(config)
-    config = config or {}
-    
-    local Nova = setmetatable({
-        Name = config.Name or "Nova UI",
-        Theme = config.Theme or "Dark",
-        Font = config.Font or DEFAULT_FONT,
-        ToggleKey = config.ToggleKey or Enum.KeyCode.RightShift,
-        Tabs = {},
-        Elements = {},
-        Connections = {},
-        Flags = {},
-    }, NovaUI)
-    
-    -- Create GUI
-    local screenGui = Create "ScreenGui" {
-        Name = Nova.Name,
-        DisplayOrder = 100,
-        IgnoreGuiInset = true,
-        ResetOnSpawn = false,
-        ZIndexBehavior = Enum.ZIndexBehavior.Global,
-    }
-    
-    -- Set parent based on environment
-    if syn and syn.protect_gui then
-        syn.protect_gui(screenGui)
-        screenGui.Parent = CoreGui
-    elseif gethui then
-        screenGui.Parent = gethui()
-    else
-        screenGui.Parent = CoreGui
+do
+    -- Utility functions
+    local function mapRange(value, min1, max1, min2, max2)
+        return (value - min1) * (max2 - min2) / (max1 - min1) + min2
     end
-    
-    Nova.ScreenGui = screenGui
-    
-    -- Create Main Frame
-    local mainFrame = Create "Frame" {
-        Name = "MainFrame",
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        BackgroundColor3 = ApplyTheme("Background", Nova.Theme),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(config.Width or 600, config.Height or 400),
-    }
-    
-    -- Add corner and stroke
-    local corner = Create "UICorner" {
-        CornerRadius = UDim.new(0, 6),
-        Parent = mainFrame
-    }
-    
-    local stroke = Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", Nova.Theme),
-        Thickness = 1,
-        Parent = mainFrame
-    }
-    
-    Nova.MainFrame = mainFrame
-    mainFrame.Parent = screenGui
-    
-    -- Create Header
-    local header = Create "Frame" {
-        Name = "Header",
-        BackgroundColor3 = ApplyTheme("Container", Nova.Theme),
-        Size = UDim2.new(1, 0, 0, 40),
-        Parent = mainFrame
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(0, 6),
-        Parent = header
-    }
-    
-    -- Fix corner radius at bottom of header
-    Create "Frame" {
-        BackgroundColor3 = ApplyTheme("Container", Nova.Theme),
-        BorderSizePixel = 0,
-        Position = UDim2.new(0, 0, 1, -6),
-        Size = UDim2.new(1, 0, 0, 6),
-        Parent = header
-    }
-    
-    -- Header Title
-    local title = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = Nova.Font,
-        Position = UDim2.fromOffset(10, 0),
-        Size = UDim2.new(1, -20, 1, 0),
-        Text = Nova.Name,
-        TextColor3 = ApplyTheme("Text", Nova.Theme),
-        TextSize = 16,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = header
-    }
-    
-    -- Header Buttons
-    local buttonHolder = Create "Frame" {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(1, -70, 0, 0),
-        Size = UDim2.new(0, 70, 1, 0),
-        Parent = header
-    }
-    
-    Create "UIListLayout" {
-        FillDirection = Enum.FillDirection.Horizontal,
-        HorizontalAlignment = Enum.HorizontalAlignment.Right,
-        Padding = UDim.new(0, 5),
-        VerticalAlignment = Enum.VerticalAlignment.Center,
-        Parent = buttonHolder
-    }
-    
-    -- Minimize Button
-    local minimizeButton = Create "ImageButton" {
-        BackgroundTransparency = 1,
-        Image = "rbxassetid://7072718362", -- General minimize icon
-        Size = UDim2.fromOffset(24, 24),
-        ImageColor3 = ApplyTheme("SubText", Nova.Theme),
-        Parent = buttonHolder
-    }
-    
-    -- Close Button
-    local closeButton = Create "ImageButton" {
-        BackgroundTransparency = 1,
-        Image = "rbxassetid://7072725342", -- General close icon
-        Size = UDim2.fromOffset(24, 24),
-        ImageColor3 = ApplyTheme("SubText", Nova.Theme),
-        Parent = buttonHolder
-    }
-    
-    -- Make header draggable
-    local isDragging = false
-    local dragStart = nil
-    local startPos = nil
-    
-    Nova:AddConnection(header.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-        end
-    end)
-    
-    Nova:AddConnection(UserInputService.InputChanged, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement and isDragging then
-            local delta = input.Position - dragStart
-            mainFrame.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-    
-    Nova:AddConnection(UserInputService.InputEnded, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = false
-        end
-    end)
-    
-    -- Content Frame
-    local contentFrame = Create "Frame" {
-        BackgroundColor3 = ApplyTheme("Background", Nova.Theme),
-        Position = UDim2.new(0, 0, 0, 40),
-        Size = UDim2.new(1, 0, 1, -40),
-        Parent = mainFrame
-    }
-    
-    -- Tab Container
-    local tabContainer = Create "Frame" {
-        BackgroundColor3 = ApplyTheme("Container", Nova.Theme),
-        Size = UDim2.new(1, 0, 0, 36),
-        Parent = contentFrame
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(0, 6),
-        Parent = tabContainer
-    }
-    
-    local tabButtonHolder = Create "ScrollingFrame" {
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Position = UDim2.fromOffset(8, 0),
-        Size = UDim2.new(1, -16, 1, 0),
-        CanvasSize = UDim2.fromScale(0, 1),
-        ScrollBarThickness = 0,
-        Parent = tabContainer
-    }
-    
-    -- Tab button layout
-    Create "UIListLayout" {
-        FillDirection = Enum.FillDirection.Horizontal,
-        HorizontalAlignment = Enum.HorizontalAlignment.Left,
-        Padding = UDim.new(0, 8),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        VerticalAlignment = Enum.VerticalAlignment.Center,
-        Parent = tabButtonHolder
-    }
-    
-    -- Tab Content Container
-    local tabContentContainer = Create "Frame" {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 0, 0, 44),
-        Size = UDim2.new(1, 0, 1, -44),
-        Parent = contentFrame
-    }
-    
-    Nova.Header = header
-    Nova.Title = title
-    Nova.MinimizeButton = minimizeButton
-    Nova.CloseButton = closeButton
-    Nova.ContentFrame = contentFrame
-    Nova.TabContainer = tabContainer
-    Nova.TabButtonHolder = tabButtonHolder
-    Nova.TabContentContainer = tabContentContainer
-    
-    -- Handle minimize button
-    Nova:AddConnection(minimizeButton.MouseButton1Click, function()
-        Nova:Minimize()
-    end)
-    
-    -- Handle close button
-    Nova:AddConnection(closeButton.MouseButton1Click, function()
-        Nova:Toggle()
-    end)
-    
-    -- Handle toggle key
-    Nova:AddConnection(UserInputService.InputBegan, function(input)
-        if input.KeyCode == Nova.ToggleKey then
-            Nova:Toggle()
-        end
-    end)
-    
-    return Nova
-end
 
--- Add connection management
-function NovaUI:AddConnection(signal, callback)
-    local connection = signal:Connect(callback)
-    table.insert(self.Connections, connection)
-    return connection
-end
-
--- UI Behaviors
-function NovaUI:Toggle()
-    self.MainFrame.Visible = not self.MainFrame.Visible
-end
-
-function NovaUI:Minimize()
-    if self.Minimized then
-        Tween(self.MainFrame, {Size = self.OriginalSize}, 0.3)
-    else
-        self.OriginalSize = self.MainFrame.Size
-        Tween(self.MainFrame, {Size = UDim2.new(self.MainFrame.Size.X.Scale, self.MainFrame.Size.X.Offset, 0, 40)}, 0.3)
+    local function screenToWorldPoint(screenPoint, depth)
+        local ray = WorkspaceCamera:ScreenPointToRay(screenPoint.X, screenPoint.Y)
+        return ray.Origin + ray.Direction * depth
     end
-    
-    self.Minimized = not self.Minimized
-    
-    -- Hide content
-    self.ContentFrame.Visible = not self.Minimized
-end
 
--- Add a notification
-function NovaUI:Notify(options)
-    options = options or {}
-    local title = options.Title or "Notification"
-    local content = options.Content or ""
-    local duration = options.Duration or 5
-    
-    -- Create notification container if needed
-    if not self.NotificationHolder then
-        self.NotificationHolder = Create "Frame" {
-            AnchorPoint = Vector2.new(1, 1),
-            BackgroundTransparency = 1,
-            Position = UDim2.new(1, -20, 1, -20),
-            Size = UDim2.new(0, 280, 1, -40),
-            Parent = self.ScreenGui
+    local function getEffectPadding()
+        local screenHeight = WorkspaceCamera.ViewportSize.Y
+        return mapRange(screenHeight, 0, 2560, 8, 56)
+    end
+
+    local Utils = {
+        screenToWorldPoint = screenToWorldPoint,
+        getEffectPadding = getEffectPadding
+    }
+
+    -- CreateAcrylic - Create a physical part for acrylic effect
+    local CreateAcrylic = function()
+        local part = Creator.New("Part", {
+            Name = "Body",
+            Color = Color3.new(0, 0, 0),
+            Material = Enum.Material.Glass,
+            Size = Vector3.new(1, 1, 0),
+            Anchored = true,
+            CanCollide = false,
+            Locked = true,
+            CastShadow = false,
+            Transparency = 0.98
+        }, {
+            Creator.New("SpecialMesh", {
+                MeshType = Enum.MeshType.Brick,
+                Offset = Vector3.new(0, 0, -1E-6)
+            })
+        })
+        
+        return part
+    end
+
+    -- AcrylicBlur - Create blur effect for acrylic surfaces
+    local AcrylicBlur = function(offset)
+        local interface = {}
+        offset = offset or 0.001
+        
+        local vectors = {
+            topLeft = Vector2.new(),
+            topRight = Vector2.new(), 
+            bottomRight = Vector2.new()
         }
         
-        Create "UIListLayout" {
-            HorizontalAlignment = Enum.HorizontalAlignment.Right,
-            SortOrder = Enum.SortOrder.LayoutOrder,
-            VerticalAlignment = Enum.VerticalAlignment.Bottom,
-            Padding = UDim.new(0, 10),
-            Parent = self.NotificationHolder
-        }
+        local model = CreateAcrylic()
+        model.Parent = workspace
+        
+        -- Update position vectors for the acrylic surface
+        local function updatePositionVectors(size, position)
+            vectors.topLeft = position
+            vectors.topRight = position + Vector2.new(size.X, 0)
+            vectors.bottomRight = position + size
+        end
+        
+        -- Update the model based on current camera and vectors
+        local function updateModel()
+            local camera = WorkspaceCamera
+            local cameraTransform = camera and camera.CFrame or CFrame.new()
+            
+            local v1, v2, v3 = Utils.screenToWorldPoint(vectors.topLeft, offset),
+                              Utils.screenToWorldPoint(vectors.topRight, offset),
+                              Utils.screenToWorldPoint(vectors.bottomRight, offset)
+                              
+            local width, height = (v2 - v1).Magnitude, (v2 - v3).Magnitude
+            
+            model.CFrame = CFrame.fromMatrix((v1 + v3)/2, cameraTransform.XVector, cameraTransform.YVector, cameraTransform.ZVector)
+            model.Mesh.Scale = Vector3.new(width, height, 0)
+        end
+        
+        -- Setup update triggers based on UI element
+        local function setupForElement(element)
+            local padding = Utils.getEffectPadding()
+            local size, pos = element.AbsoluteSize - Vector2.new(padding, padding), 
+                             element.AbsolutePosition + Vector2.new(padding/2, padding/2)
+            
+            updatePositionVectors(size, pos)
+            task.spawn(updateModel)
+        end
+        
+        -- Connect camera property changes to update the effect
+        local connections = {}
+        local function connectCamera()
+            local camera = WorkspaceCamera
+            if not camera then return end
+            
+            table.insert(connections, camera:GetPropertyChangedSignal("CFrame"):Connect(updateModel))
+            table.insert(connections, camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateModel))
+            table.insert(connections, camera:GetPropertyChangedSignal("FieldOfView"):Connect(updateModel))
+            
+            task.spawn(updateModel)
+        end
+        
+        -- Clean up connections when model is destroyed
+        model.Destroying:Connect(function()
+            for _, connection in connections do
+                pcall(function() connection:Disconnect() end)
+            end
+        end)
+        
+        connectCamera()
+        
+        return setupForElement, model
     end
-    
-    -- Create notification
-    local notifHeight = content ~= "" and 80 or 50
-    
-    local notification = Create "Frame" {
-        BackgroundColor3 = ApplyTheme("Container", self.Theme),
-        Size = UDim2.new(0, 0, 0, notifHeight),
-        BackgroundTransparency = 0,
-        Parent = self.NotificationHolder
+
+    -- AcrylicPaint - Create the visual frame for acrylic effects
+    local AcrylicPaint = function()
+        local interface = {}
+        
+        -- Create the visual frame for the acrylic paint effect
+        interface.Frame = Creator.New("Frame", {
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 0.9,
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0
+        }, {
+            -- Noise texture
+            Creator.New("ImageLabel", {
+                Image = "rbxassetid://8992230677",
+                ScaleType = "Slice",
+                SliceCenter = Rect.new(Vector2.new(99, 99), Vector2.new(99, 99)),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Size = UDim2.new(1, 120, 1, 116),
+                Position = UDim2.new(0.5, 0, 0.5, 0),
+                BackgroundTransparency = 1,
+                ImageColor3 = Color3.fromRGB(0, 0, 0),
+                ImageTransparency = 0.7
+            }),
+            
+            -- Corner rounding
+            Creator.New("UICorner", {
+                CornerRadius = UDim.new(0, 8)
+            }),
+            
+            -- Background layer
+            Creator.New("Frame", {
+                BackgroundTransparency = 0.45,
+                Size = UDim2.fromScale(1, 1),
+                Name = "Background",
+                ThemeTag = {BackgroundColor3 = "AcrylicMain"}
+            }, {
+                Creator.New("UICorner", {
+                    CornerRadius = UDim.new(0, 8)
+                })
+            }),
+            
+            -- Gradient overlay
+            Creator.New("Frame", {
+                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+                BackgroundTransparency = 0.4,
+                Size = UDim2.fromScale(1, 1)
+            }, {
+                Creator.New("UICorner", {
+                    CornerRadius = UDim.new(0, 8)
+                }),
+                Creator.New("UIGradient", {
+                    Rotation = 90,
+                    ThemeTag = {Color = "AcrylicGradient"}
+                })
+            }),
+            
+            -- Noise texture layers
+            Creator.New("ImageLabel", {
+                Image = "rbxassetid://9968344105",
+                ImageTransparency = 0.98,
+                ScaleType = Enum.ScaleType.Tile,
+                TileSize = UDim2.new(0, 128, 0, 128),
+                Size = UDim2.fromScale(1, 1),
+                BackgroundTransparency = 1
+            }, {
+                Creator.New("UICorner", {
+                    CornerRadius = UDim.new(0, 8)
+                })
+            }),
+            
+            Creator.New("ImageLabel", {
+                Image = "rbxassetid://9968344227",
+                ImageTransparency = 0.9,
+                ScaleType = Enum.ScaleType.Tile,
+                TileSize = UDim2.new(0, 128, 0, 128),
+                Size = UDim2.fromScale(1, 1),
+                BackgroundTransparency = 1,
+                ThemeTag = {ImageTransparency = "AcrylicNoise"}
+            }, {
+                Creator.New("UICorner", {
+                    CornerRadius = UDim.new(0, 8)
+                })
+            }),
+            
+            -- Border
+            Creator.New("Frame", {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromScale(1, 1),
+                ZIndex = 2
+            }, {
+                Creator.New("UICorner", {
+                    CornerRadius = UDim.new(0, 8)
+                }),
+                Creator.New("UIStroke", {
+                    Transparency = 0.5,
+                    Thickness = 1,
+                    ThemeTag = {Color = "AcrylicBorder"}
+                })
+            })
+        })
+        
+        -- Add blur effect if acrylic is enabled
+        local effectInstance
+        if Celestial.UseAcrylic then
+            local setupBlur, model = AcrylicBlur()
+            effectInstance = {
+                Frame = Creator.New("Frame", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.fromScale(1, 1)
+                }),
+                Model = model
+            }
+            
+            -- Connect position and size changes to update blur
+            Creator.AddSignal(effectInstance.Frame:GetPropertyChangedSignal("AbsolutePosition"), function()
+                setupBlur(effectInstance.Frame)
+            end)
+            
+            Creator.AddSignal(effectInstance.Frame:GetPropertyChangedSignal("AbsoluteSize"), function()
+                setupBlur(effectInstance.Frame)
+            end)
+            
+            -- Add parent element to update visibility based on parent
+            effectInstance.AddParent = function(parent)
+                Creator.AddSignal(parent:GetPropertyChangedSignal("Visible"), function()
+                    effectInstance.SetVisibility(parent.Visible)
+                end)
+            end
+            
+            -- Set visibility of the acrylic effect
+            effectInstance.SetVisibility = function(visible)
+                model.Transparency = visible and 0.98 or 1
+            end
+            
+            effectInstance.Frame.Parent = interface.Frame
+            interface.Model = effectInstance.Model
+            interface.AddParent = effectInstance.AddParent
+            interface.SetVisibility = effectInstance.SetVisibility
+        end
+        
+        return interface
+    end
+
+    -- Initialize acrylic effects
+    function Acrylic.init()
+        local depthEffect = Instance.new("DepthOfFieldEffect")
+        depthEffect.FarIntensity = 0
+        depthEffect.InFocusRadius = 0.1
+        depthEffect.NearIntensity = 1
+        
+        local savedEffects = {}
+        
+        -- Enable acrylic effect by disabling other depth effects
+        function Acrylic.Enable()
+            for _, effect in pairs(savedEffects) do
+                effect.Enabled = false
+            end
+            depthEffect.Parent = LightingService
+        end
+        
+        -- Disable acrylic effect and restore original depth effects
+        function Acrylic.Disable()
+            for _, effect in pairs(savedEffects) do
+                effect.Enabled = effect.enabled
+            end
+            depthEffect.Parent = nil
+        end
+        
+        -- Save state of existing depth effects
+        local function saveExistingEffects()
+            local function checkEffect(effect)
+                if effect:IsA("DepthOfFieldEffect") then
+                    savedEffects[effect] = {enabled = effect.Enabled}
+                end
+            end
+            
+            for _, child in pairs(LightingService:GetChildren()) do
+                checkEffect(child)
+            end
+            
+            if WorkspaceCamera then
+                for _, child in pairs(WorkspaceCamera:GetChildren()) do
+                    checkEffect(child)
+                end
+            end
+        end
+        
+        saveExistingEffects()
+        Acrylic.Enable()
+    end
+
+    -- Export Acrylic components
+    Acrylic.AcrylicBlur = AcrylicBlur
+    Acrylic.CreateAcrylic = CreateAcrylic
+    Acrylic.AcrylicPaint = AcrylicPaint
+end
+
+--//////////////////////////////////////////////////////////////////////////////////--
+--                                 THEMES DEFINITIONS                               --
+--//////////////////////////////////////////////////////////////////////////////////--
+
+do
+    -- Dark Theme
+    Themes.Dark = {
+        Name = "Dark",
+        Accent = Color3.fromRGB(96, 205, 255),
+        AcrylicMain = Color3.fromRGB(60, 60, 60),
+        AcrylicBorder = Color3.fromRGB(90, 90, 90),
+        AcrylicGradient = ColorSequence.new(Color3.fromRGB(40, 40, 40), Color3.fromRGB(40, 40, 40)),
+        AcrylicNoise = 0.9,
+        TitleBarLine = Color3.fromRGB(75, 75, 75),
+        Tab = Color3.fromRGB(120, 120, 120),
+        Element = Color3.fromRGB(120, 120, 120),
+        ElementBorder = Color3.fromRGB(35, 35, 35),
+        InElementBorder = Color3.fromRGB(90, 90, 90),
+        ElementTransparency = 0.87,
+        ToggleSlider = Color3.fromRGB(120, 120, 120),
+        ToggleToggled = Color3.fromRGB(0, 0, 0),
+        SliderRail = Color3.fromRGB(120, 120, 120),
+        DropdownFrame = Color3.fromRGB(160, 160, 160),
+        DropdownHolder = Color3.fromRGB(45, 45, 45),
+        DropdownBorder = Color3.fromRGB(35, 35, 35),
+        DropdownOption = Color3.fromRGB(120, 120, 120),
+        Keybind = Color3.fromRGB(120, 120, 120),
+        Input = Color3.fromRGB(160, 160, 160),
+        InputFocused = Color3.fromRGB(10, 10, 10),
+        InputIndicator = Color3.fromRGB(150, 150, 150),
+        Dialog = Color3.fromRGB(45, 45, 45),
+        DialogHolder = Color3.fromRGB(35, 35, 35),
+        DialogHolderLine = Color3.fromRGB(30, 30, 30),
+        DialogButton = Color3.fromRGB(45, 45, 45),
+        DialogButtonBorder = Color3.fromRGB(80, 80, 80),
+        DialogBorder = Color3.fromRGB(70, 70, 70),
+        DialogInput = Color3.fromRGB(55, 55, 55),
+        DialogInputLine = Color3.fromRGB(160, 160, 160),
+        Text = Color3.fromRGB(240, 240, 240),
+        SubText = Color3.fromRGB(170, 170, 170),
+        Hover = Color3.fromRGB(120, 120, 120),
+        HoverChange = 0.07
     }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(0, 6),
-        Parent = notification
+
+    -- Darker Theme
+    Themes.Darker = {
+        Name = "Darker",
+        Accent = Color3.fromRGB(72, 138, 182),
+        AcrylicMain = Color3.fromRGB(30, 30, 30),
+        AcrylicBorder = Color3.fromRGB(60, 60, 60),
+        AcrylicGradient = ColorSequence.new(Color3.fromRGB(25, 25, 25), Color3.fromRGB(15, 15, 15)),
+        AcrylicNoise = 0.94,
+        TitleBarLine = Color3.fromRGB(65, 65, 65),
+        Tab = Color3.fromRGB(100, 100, 100),
+        Element = Color3.fromRGB(70, 70, 70),
+        ElementBorder = Color3.fromRGB(25, 25, 25),
+        InElementBorder = Color3.fromRGB(55, 55, 55),
+        ElementTransparency = 0.82,
+        DropdownFrame = Color3.fromRGB(120, 120, 120),
+        DropdownHolder = Color3.fromRGB(35, 35, 35),
+        DropdownBorder = Color3.fromRGB(25, 25, 25),
+        Dialog = Color3.fromRGB(35, 35, 35),
+        DialogHolder = Color3.fromRGB(25, 25, 25),
+        DialogHolderLine = Color3.fromRGB(20, 20, 20),
+        DialogButton = Color3.fromRGB(35, 35, 35),
+        DialogButtonBorder = Color3.fromRGB(55, 55, 55),
+        DialogBorder = Color3.fromRGB(50, 50, 50),
+        DialogInput = Color3.fromRGB(45, 45, 45),
+        DialogInputLine = Color3.fromRGB(120, 120, 120),
+        Text = Color3.fromRGB(240, 240, 240),
+        SubText = Color3.fromRGB(170, 170, 170),
+        Hover = Color3.fromRGB(70, 70, 70),
+        HoverChange = 0.07
     }
-    
-    Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", self.Theme),
-        Thickness = 1,
-        Parent = notification
+
+    -- Light Theme
+    Themes.Light = {
+        Name = "Light",
+        Accent = Color3.fromRGB(0, 103, 192),
+        AcrylicMain = Color3.fromRGB(200, 200, 200),
+        AcrylicBorder = Color3.fromRGB(120, 120, 120),
+        AcrylicGradient = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 255, 255)),
+        AcrylicNoise = 0.96,
+        TitleBarLine = Color3.fromRGB(160, 160, 160),
+        Tab = Color3.fromRGB(90, 90, 90),
+        Element = Color3.fromRGB(255, 255, 255),
+        ElementBorder = Color3.fromRGB(180, 180, 180),
+        InElementBorder = Color3.fromRGB(150, 150, 150),
+        ElementTransparency = 0.65,
+        ToggleSlider = Color3.fromRGB(40, 40, 40),
+        ToggleToggled = Color3.fromRGB(255, 255, 255),
+        SliderRail = Color3.fromRGB(40, 40, 40),
+        DropdownFrame = Color3.fromRGB(200, 200, 200),
+        DropdownHolder = Color3.fromRGB(240, 240, 240),
+        DropdownBorder = Color3.fromRGB(200, 200, 200),
+        DropdownOption = Color3.fromRGB(150, 150, 150),
+        Keybind = Color3.fromRGB(120, 120, 120),
+        Input = Color3.fromRGB(200, 200, 200),
+        InputFocused = Color3.fromRGB(100, 100, 100),
+        InputIndicator = Color3.fromRGB(80, 80, 80),
+        Dialog = Color3.fromRGB(255, 255, 255),
+        DialogHolder = Color3.fromRGB(240, 240, 240),
+        DialogHolderLine = Color3.fromRGB(228, 228, 228),
+        DialogButton = Color3.fromRGB(255, 255, 255),
+        DialogButtonBorder = Color3.fromRGB(190, 190, 190),
+        DialogBorder = Color3.fromRGB(140, 140, 140),
+        DialogInput = Color3.fromRGB(250, 250, 250),
+        DialogInputLine = Color3.fromRGB(160, 160, 160),
+        Text = Color3.fromRGB(0, 0, 0),
+        SubText = Color3.fromRGB(40, 40, 40),
+        Hover = Color3.fromRGB(50, 50, 50),
+        HoverChange = 0.16
     }
-    
-    local titleLabel = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        Position = UDim2.fromOffset(10, 8),
-        Size = UDim2.new(1, -20, 0, 20),
-        Text = title,
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 16,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = notification
+
+    -- Aqua Theme
+    Themes.Aqua = {
+        Name = "Aqua",
+        Accent = Color3.fromRGB(60, 165, 165),
+        AcrylicMain = Color3.fromRGB(20, 20, 20),
+        AcrylicBorder = Color3.fromRGB(50, 100, 100),
+        AcrylicGradient = ColorSequence.new(Color3.fromRGB(60, 140, 140), Color3.fromRGB(40, 80, 80)),
+        AcrylicNoise = 0.92,
+        TitleBarLine = Color3.fromRGB(60, 120, 120),
+        Tab = Color3.fromRGB(140, 180, 180),
+        Element = Color3.fromRGB(110, 160, 160),
+        ElementBorder = Color3.fromRGB(40, 70, 70),
+        InElementBorder = Color3.fromRGB(80, 110, 110),
+        ElementTransparency = 0.84,
+        ToggleSlider = Color3.fromRGB(110, 160, 160),
+        ToggleToggled = Color3.fromRGB(0, 0, 0),
+        SliderRail = Color3.fromRGB(110, 160, 160),
+        DropdownFrame = Color3.fromRGB(160, 200, 200),
+        DropdownHolder = Color3.fromRGB(40, 80, 80),
+        DropdownBorder = Color3.fromRGB(40, 65, 65),
+        DropdownOption = Color3.fromRGB(110, 160, 160),
+        Keybind = Color3.fromRGB(110, 160, 160),
+        Input = Color3.fromRGB(110, 160, 160),
+        InputFocused = Color3.fromRGB(20, 10, 30),
+        InputIndicator = Color3.fromRGB(130, 170, 170),
+        Dialog = Color3.fromRGB(40, 80, 80),
+        DialogHolder = Color3.fromRGB(30, 60, 60),
+        DialogHolderLine = Color3.fromRGB(25, 50, 50),
+        DialogButton = Color3.fromRGB(40, 80, 80),
+        DialogButtonBorder = Color3.fromRGB(80, 110, 110),
+        DialogBorder = Color3.fromRGB(50, 100, 100),
+        DialogInput = Color3.fromRGB(45, 90, 90),
+        DialogInputLine = Color3.fromRGB(130, 170, 170),
+        Text = Color3.fromRGB(240, 240, 240),
+        SubText = Color3.fromRGB(170, 170, 170),
+        Hover = Color3.fromRGB(110, 160, 160),
+        HoverChange = 0.04
     }
-    
-    if content ~= "" then
-        local contentLabel = Create "TextLabel" {
+
+    -- Amethyst Theme
+    Themes.Amethyst = {
+        Name = "Amethyst",
+        Accent = Color3.fromRGB(97, 62, 167),
+        AcrylicMain = Color3.fromRGB(20, 20, 20),
+        AcrylicBorder = Color3.fromRGB(110, 90, 130),
+        AcrylicGradient = ColorSequence.new(Color3.fromRGB(85, 57, 139), Color3.fromRGB(40, 25, 65)),
+        AcrylicNoise = 0.92,
+        TitleBarLine = Color3.fromRGB(95, 75, 110),
+        Tab = Color3.fromRGB(160, 140, 180),
+        Element = Color3.fromRGB(140, 120, 160),
+        ElementBorder = Color3.fromRGB(60, 50, 70),
+        InElementBorder = Color3.fromRGB(100, 90, 110),
+        ElementTransparency = 0.87,
+        ToggleSlider = Color3.fromRGB(140, 120, 160),
+        ToggleToggled = Color3.fromRGB(0, 0, 0),
+        SliderRail = Color3.fromRGB(140, 120, 160),
+        DropdownFrame = Color3.fromRGB(170, 160, 200),
+        DropdownHolder = Color3.fromRGB(60, 45, 80),
+        DropdownBorder = Color3.fromRGB(50, 40, 65),
+        DropdownOption = Color3.fromRGB(140, 120, 160),
+        Keybind = Color3.fromRGB(140, 120, 160),
+        Input = Color3.fromRGB(140, 120, 160),
+        InputFocused = Color3.fromRGB(20, 10, 30),
+        InputIndicator = Color3.fromRGB(170, 150, 190),
+        Dialog = Color3.fromRGB(60, 45, 80),
+        DialogHolder = Color3.fromRGB(45, 30, 65),
+        DialogHolderLine = Color3.fromRGB(40, 25, 60),
+        DialogButton = Color3.fromRGB(60, 45, 80),
+        DialogButtonBorder = Color3.fromRGB(95, 80, 110),
+        DialogBorder = Color3.fromRGB(85, 70, 100),
+        DialogInput = Color3.fromRGB(70, 55, 85),
+        DialogInputLine = Color3.fromRGB(175, 160, 190),
+        Text = Color3.fromRGB(240, 240, 240),
+        SubText = Color3.fromRGB(170, 170, 170),
+        Hover = Color3.fromRGB(140, 120, 160),
+        HoverChange = 0.04
+    }
+
+    -- Rose Theme
+    Themes.Rose = {
+        Name = "Rose",
+        Accent = Color3.fromRGB(180, 55, 90),
+        AcrylicMain = Color3.fromRGB(40, 40, 40),
+        AcrylicBorder = Color3.fromRGB(130, 90, 110),
+        AcrylicGradient = ColorSequence.new(Color3.fromRGB(190, 60, 135), Color3.fromRGB(165, 50, 70)),
+        AcrylicNoise = 0.92,
+        TitleBarLine = Color3.fromRGB(140, 85, 105),
+        Tab = Color3.fromRGB(180, 140, 160),
+        Element = Color3.fromRGB(200, 120, 170),
+        ElementBorder = Color3.fromRGB(110, 70, 85),
+        InElementBorder = Color3.fromRGB(120, 90, 90),
+        ElementTransparency = 0.86,
+        ToggleSlider = Color3.fromRGB(200, 120, 170),
+        ToggleToggled = Color3.fromRGB(0, 0, 0),
+        SliderRail = Color3.fromRGB(200, 120, 170),
+        DropdownFrame = Color3.fromRGB(200, 160, 180),
+        DropdownHolder = Color3.fromRGB(120, 50, 75),
+        DropdownBorder = Color3.fromRGB(90, 40, 55),
+        DropdownOption = Color3.fromRGB(200, 120, 170),
+        Keybind = Color3.fromRGB(200, 120, 170),
+        Input = Color3.fromRGB(200, 120, 170),
+        InputFocused = Color3.fromRGB(20, 10, 30),
+        InputIndicator = Color3.fromRGB(170, 150, 190),
+        Dialog = Color3.fromRGB(120, 50, 75),
+        DialogHolder = Color3.fromRGB(95, 40, 60),
+        DialogHolderLine = Color3.fromRGB(90, 35, 55),
+        DialogButton = Color3.fromRGB(120, 50, 75),
+        DialogButtonBorder = Color3.fromRGB(155, 90, 115),
+        DialogBorder = Color3.fromRGB(100, 70, 90),
+        DialogInput = Color3.fromRGB(135, 55, 80),
+        DialogInputLine = Color3.fromRGB(190, 160, 180),
+        Text = Color3.fromRGB(240, 240, 240),
+        SubText = Color3.fromRGB(170, 170, 170),
+        Hover = Color3.fromRGB(200, 120, 170),
+        HoverChange = 0.04
+    }
+end
+
+--//////////////////////////////////////////////////////////////////////////////////--
+--                                   COMPONENTS                                     --
+--//////////////////////////////////////////////////////////////////////////////////--
+
+do
+    -- Element Component (Base for UI elements)
+    Components.Element = function(title, description, container, isInteractable)
+        local interface = {}
+        
+        -- Title label
+        interface.TitleLabel = Creator.New("TextLabel", {
+            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal),
+            Text = title,
+            TextColor3 = Color3.fromRGB(240, 240, 240),
+            TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Size = UDim2.new(1, 0, 0, 14),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
             BackgroundTransparency = 1,
-            Font = self.Font,
-            Position = UDim2.fromOffset(10, 30),
-            Size = UDim2.new(1, -20, 0, 40),
-            Text = content,
-            TextColor3 = ApplyTheme("SubText", self.Theme),
-            TextSize = 14,
+            ThemeTag = {TextColor3 = "Text"}
+        })
+        
+        -- Description label
+        interface.DescLabel = Creator.New("TextLabel", {
+            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
+            Text = description,
+            TextColor3 = Color3.fromRGB(200, 200, 200),
+            TextSize = 12,
             TextWrapped = true,
             TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Top,
-            Parent = notification
-        }
-    end
-    
-    -- Animate in
-    Tween(notification, {Size = UDim2.new(1, 0, 0, notifHeight)}, 0.3)
-    
-    -- Animate out after duration
-    task.delay(duration, function()
-        Tween(notification, {Size = UDim2.new(0, 0, 0, notifHeight)}, 0.3).Completed:Connect(function()
-            notification:Destroy()
-        end)
-    end)
-    
-    return notification
-end
-
--- Tab Creation
-function NovaUI:AddTab(name, icon)
-    -- Create tab button
-    local tabButton = Create "TextButton" {
-        AutoButtonColor = false,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Font = self.Font,
-        LayoutOrder = #self.Tabs + 1,
-        Size = UDim2.new(0, 120, 1, -10),
-        Text = name,
-        TextColor3 = ApplyTheme("SubText", self.Theme),
-        TextSize = 14,
-        Parent = self.TabButtonHolder
-    }
-    
-    if icon then
-        local iconImage = Create "ImageLabel" {
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            AutomaticSize = Enum.AutomaticSize.Y,
             BackgroundTransparency = 1,
-            Image = icon,
-            Position = UDim2.fromOffset(5, 0),
-            Size = UDim2.fromOffset(16, 16),
-            AnchorPoint = Vector2.new(0, 0.5),
-            ImageColor3 = ApplyTheme("SubText", self.Theme),
-            Parent = tabButton
-        }
-        
-        tabButton.Text = "   " .. tabButton.Text
-    end
-    
-    -- Create tab content
-    local tabContent = Create "ScrollingFrame" {
-        Active = true,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Size = UDim2.fromScale(1, 1),
-        CanvasSize = UDim2.fromScale(0, 0),
-        ScrollBarThickness = 4,
-        ScrollBarImageColor3 = ApplyTheme("SubText", self.Theme),
-        ScrollBarImageTransparency = 0.5,
-        Visible = false,
-        Parent = self.TabContentContainer
-    }
-    
-    -- Setup padding and layout for sections
-    Create "UIPadding" {
-        PaddingBottom = UDim.new(0, 10),
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        PaddingTop = UDim.new(0, 10),
-        Parent = tabContent
-    }
-    
-    local listLayout = Create "UIListLayout" {
-        Padding = UDim.new(0, 10),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = tabContent
-    }
-    
-    -- Update canvas size when elements change
-    self:AddConnection(listLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-        tabContent.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 20)
-    end)
-    
-    -- Create tab object
-    local tab = {
-        Name = name,
-        Button = tabButton,
-        Container = tabContent,
-        Sections = {},
-    }
-    
-    -- Select this tab if it's the first
-    if #self.Tabs == 0 then
-        tabContent.Visible = true
-        tabButton.TextColor3 = ApplyTheme("Accent", self.Theme)
-        self.SelectedTab = tab
-    end
-    
-    -- Tab selection behavior
-    self:AddConnection(tabButton.MouseButton1Click, function()
-        self:SelectTab(tab)
-    end)
-    
-    -- Add tab functions
-    function tab:AddSection(title)
-        return self.UI:AddSection(self, title)
-    end
-    
-    tab.UI = self
-    table.insert(self.Tabs, tab)
-    
-    return tab
-end
-
-function NovaUI:SelectTab(tab)
-    if self.SelectedTab == tab then return end
-    
-    -- Hide all tab contents
-    for _, t in ipairs(self.Tabs) do
-        t.Container.Visible = false
-        t.Button.TextColor3 = ApplyTheme("SubText", self.Theme)
-        
-        -- Also update icon if present
-        for _, child in ipairs(t.Button:GetChildren()) do
-            if child:IsA("ImageLabel") then
-                child.ImageColor3 = ApplyTheme("SubText", self.Theme)
-            end
-        end
-    end
-    
-    -- Show selected tab
-    tab.Container.Visible = true
-    tab.Button.TextColor3 = ApplyTheme("Accent", self.Theme)
-    
-    -- Update icon if present
-    for _, child in ipairs(tab.Button:GetChildren()) do
-        if child:IsA("ImageLabel") then
-            child.ImageColor3 = ApplyTheme("Accent", self.Theme)
-        end
-    end
-    
-    self.SelectedTab = tab
-end
-
--- Section Creation
-function NovaUI:AddSection(tab, title)
-    -- Create section container
-    local section = Create "Frame" {
-        BackgroundColor3 = ApplyTheme("Container", self.Theme),
-        Size = UDim2.new(1, 0, 0, 36), -- Will be updated as elements are added
-        Parent = tab.Container
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(0, 6),
-        Parent = section
-    }
-    
-    Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", self.Theme),
-        Thickness = 1,
-        Parent = section
-    }
-    
-    -- Section title
-    local sectionTitle = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        Position = UDim2.fromOffset(10, 8),
-        Size = UDim2.new(1, -20, 0, 20),
-        Text = title,
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 15,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = section
-    }
-    
-    -- Container for elements
-    local elementContainer = Create "Frame" {
-        BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(10, 36),
-        Size = UDim2.new(1, -20, 0, 0), -- Will be updated as elements are added
-        Parent = section
-    }
-    
-    local listLayout = Create "UIListLayout" {
-        Padding = UDim.new(0, 8),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = elementContainer
-    }
-    
-    -- Update section size when elements change
-    self:AddConnection(listLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-        elementContainer.Size = UDim2.new(1, -20, 0, listLayout.AbsoluteContentSize.Y)
-        section.Size = UDim2.new(1, 0, 0, elementContainer.Size.Y.Offset + 46)
-    end)
-    
-    -- Create section object
-    local sectionObj = {
-        Title = title,
-        Container = elementContainer,
-        Frame = section,
-        Elements = {}
-    }
-    
-    -- Add section functions
-    function sectionObj:AddButton(options)
-        return self.UI:AddButton(self, options)
-    end
-    
-    function sectionObj:AddToggle(id, options)
-        return self.UI:AddToggle(self, id, options)
-    end
-    
-    function sectionObj:AddSlider(id, options)
-        return self.UI:AddSlider(self, id, options)
-    end
-    
-    function sectionObj:AddDropdown(id, options)
-        return self.UI:AddDropdown(self, id, options)
-    end
-    
-    function sectionObj:AddLabel(text)
-        return self.UI:AddLabel(self, text)
-    end
-    
-    function sectionObj:AddInput(id, options)
-        return self.UI:AddInput(self, id, options)
-    end
-    
-    function sectionObj:AddColorPicker(id, options)
-        return self.UI:AddColorPicker(self, id, options)
-    end
-    
-    function sectionObj:AddKeybind(id, options)
-        return self.UI:AddKeybind(self, id, options)
-    end
-    
-    sectionObj.UI = self
-    table.insert(tab.Sections, sectionObj)
-    
-    return sectionObj
-end
-
--- Element Creation
-function NovaUI:AddButton(section, options)
-    options = options or {}
-    
-    -- Create button container
-    local container = Create "Frame" {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 32),
-        Parent = section.Container
-    }
-    
-    -- Create title
-    local title = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(0.5, 0, 1, 0),
-        Text = options.Title or "Button",
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container
-    }
-    
-    -- Create button
-    local button = Create "TextButton" {
-        AnchorPoint = Vector2.new(1, 0.5),
-        BackgroundColor3 = ApplyTheme("Button", self.Theme),
-        Font = self.Font,
-        Position = UDim2.new(1, 0, 0.5, 0),
-        Size = UDim2.new(0, 120, 0, 26),
-        Text = options.Text or "Click",
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        AutoButtonColor = false,
-        Parent = container
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(0, 4),
-        Parent = button
-    }
-    
-    Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", self.Theme),
-        Thickness = 1,
-        Parent = button
-    }
-    
-    -- Button hover and click effects
-    local buttonColor = ApplyTheme("Button", self.Theme)
-    local hoverColor = ApplyTheme("ButtonHover", self.Theme)
-    
-    self:AddConnection(button.MouseEnter, function()
-        Tween(button, {BackgroundColor3 = hoverColor})
-    end)
-    
-    self:AddConnection(button.MouseLeave, function()
-        Tween(button, {BackgroundColor3 = buttonColor})
-    end)
-    
-    self:AddConnection(button.MouseButton1Down, function()
-        Tween(button, {BackgroundColor3 = buttonColor})
-    end)
-    
-    self:AddConnection(button.MouseButton1Up, function()
-        Tween(button, {BackgroundColor3 = hoverColor})
-    end)
-    
-    -- Click callback
-    self:AddConnection(button.MouseButton1Click, function()
-        if options.Callback then
-            options.Callback()
-        end
-    end)
-    
-    -- Create button object
-    local buttonObj = {
-        Type = "Button",
-        Title = title,
-        Button = button,
-        SetTitle = function(_, text)
-            title.Text = text
-        end,
-        SetText = function(_, text)
-            button.Text = text
-        end
-    }
-    
-    return buttonObj
-end
-
-function NovaUI:AddToggle(section, id, options)
-    options = options or {}
-    local default = options.Default == true
-    
-    -- Create toggle container
-    local container = Create "Frame" {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 32),
-        Parent = section.Container
-    }
-    
-    -- Title
-    local title = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(0.5, 0, 1, 0),
-        Text = options.Title or "Toggle",
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container
-    }
-    
-    -- Description
-    if options.Description then
-        container.Size = UDim2.new(1, 0, 0, 42)
-        
-        local description = Create "TextLabel" {
-            BackgroundTransparency = 1,
-            Font = self.Font,
-            Position = UDim2.fromOffset(0, 22),
-            Size = UDim2.new(0.7, 0, 0, 14),
-            Text = options.Description,
-            TextColor3 = ApplyTheme("SubText", self.Theme),
-            TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = container
-        }
-    end
-    
-    -- Toggle background
-    local toggleBackground = Create "Frame" {
-        AnchorPoint = Vector2.new(1, 0.5),
-        BackgroundColor3 = ApplyTheme("Toggle", self.Theme),
-        Position = UDim2.new(1, 0, 0.5, 0),
-        Size = UDim2.new(0, 40, 0, 20),
-        Parent = container
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(1, 0),
-        Parent = toggleBackground
-    }
-    
-    Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", self.Theme),
-        Thickness = 1,
-        Parent = toggleBackground
-    }
-    
-    -- Toggle circle
-    local toggleCircle = Create "Frame" {
-        AnchorPoint = Vector2.new(0, 0.5),
-        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-        Position = UDim2.new(0, 2, 0.5, 0),
-        Size = UDim2.new(0, 16, 0, 16),
-        Parent = toggleBackground
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(1, 0),
-        Parent = toggleCircle
-    }
-    
-    -- Create toggle object
-    local toggle = {
-        Type = "Toggle",
-        Title = title,
-        Background = toggleBackground,
-        Circle = toggleCircle,
-        Container = container,
-        Value = default,
-        Callback = options.Callback,
-        SetValue = function(self, value)
-            self.Value = value
-            
-            Tween(self.Circle, {
-                Position = UDim2.new(0, value and 22 or 2, 0.5, 0)
-            })
-            
-            Tween(self.Background, {
-                BackgroundColor3 = value and ApplyTheme("ToggleAccent", self.UI.Theme) or ApplyTheme("Toggle", self.UI.Theme)
-            })
-            
-            if self.Callback then
-                self.Callback(value)
-            end
-            
-            self.UI.Flags[id] = value
-        end,
-        Toggle = function(self)
-            self:SetValue(not self.Value)
-        end,
-        SetTitle = function(self, text)
-            self.Title.Text = text
-        end
-    }
-    
-    -- Toggle behavior
-    self:AddConnection(toggleBackground.MouseButton1Click, function()
-        toggle:Toggle()
-    end)
-    
-    -- Initialize
-    toggle.UI = self
-    self.Flags[id] = default
-    toggle:SetValue(default)
-    
-    return toggle
-end
-
-function NovaUI:AddSlider(section, id, options)
-    options = options or {}
-    
-    local min = options.Min or 0
-    local max = options.Max or 100
-    local default = math.clamp(options.Default or min, min, max)
-    local rounding = options.Rounding or 1
-    
-    -- Create slider container
-    local container = Create "Frame" {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 40),
-        Parent = section.Container
-    }
-    
-    -- Title and value
-    local titleValue = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(1, 0, 0, 20),
-        Text = options.Title .. ": " .. default,
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container
-    }
-    
-    -- Description
-    if options.Description then
-        container.Size = UDim2.new(1, 0, 0, 54)
-        
-        local description = Create "TextLabel" {
-            BackgroundTransparency = 1,
-            Font = self.Font,
-            Position = UDim2.fromOffset(0, 22),
             Size = UDim2.new(1, 0, 0, 14),
-            Text = options.Description,
-            TextColor3 = ApplyTheme("SubText", self.Theme),
-            TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = container
-        }
+            ThemeTag = {TextColor3 = "SubText"}
+        })
         
-        titleValue.Position = UDim2.fromOffset(0, 0)
-    else
-        titleValue.Position = UDim2.fromOffset(0, 0)
-    end
-    
-    -- Slider background
-    local sliderBackground = Create "Frame" {
-        BackgroundColor3 = ApplyTheme("Slider", self.Theme),
-        BorderSizePixel = 0,
-        Position = UDim2.new(0, 0, 1, -10),
-        Size = UDim2.new(1, 0, 0, 6),
-        Parent = container
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(1, 0),
-        Parent = sliderBackground
-    }
-    
-    -- Slider fill
-    local sliderFill = Create "Frame" {
-        BackgroundColor3 = ApplyTheme("Accent", self.Theme),
-        BorderSizePixel = 0,
-        Size = UDim2.new((default - min) / (max - min), 0, 1, 0),
-        Parent = sliderBackground
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(1, 0),
-        Parent = sliderFill
-    }
-    
-    -- Slider circle
-    local sliderCircle = Create "Frame" {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-        Position = UDim2.new((default - min) / (max - min), 0, 0.5, 0),
-        Size = UDim2.fromOffset(14, 14),
-        ZIndex = 2,
-        Parent = sliderBackground
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(1, 0),
-        Parent = sliderCircle
-    }
-    
-    Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", self.Theme),
-        Thickness = 1,
-        Parent = sliderCircle
-    }
-    
-    -- Create slider object
-    local slider = {
-        Type = "Slider",
-        Title = titleValue,
-        Background = sliderBackground,
-        Fill = sliderFill,
-        Circle = sliderCircle,
-        Container = container,
-        Min = min,
-        Max = max,
-        Value = default,
-        Rounding = rounding,
-        Callback = options.Callback,
-        SetValue = function(self, value)
-            value = math.clamp(value, self.Min, self.Max)
-            
-            if self.Rounding then
-                value = math.floor(value / self.Rounding + 0.5) * self.Rounding
-            end
-            
-            self.Value = value
-            
-            -- Update UI
-            local percent = (value - self.Min) / (self.Max - self.Min)
-            
-            self.Fill.Size = UDim2.new(percent, 0, 1, 0)
-            self.Circle.Position = UDim2.new(percent, 0, 0.5, 0)
-            self.Title.Text = options.Title .. ": " .. value
-            
-            if self.Callback then
-                self.Callback(value)
-            end
-            
-            self.UI.Flags[id] = value
-        end
-    }
-    
-    -- Slider behavior
-    local isDragging = false
-    
-    self:AddConnection(sliderBackground.MouseButton1Down, function()
-        isDragging = true
-    end)
-    
-    self:AddConnection(sliderCircle.MouseButton1Down, function()
-        isDragging = true
-    end)
-    
-    self:AddConnection(UserInputService.InputEnded, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isDragging = false
-        end
-    end)
-    
-    self:AddConnection(UserInputService.InputChanged, function(input)
-        if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local mousePos = input.Position.X
-            local framePos = sliderBackground.AbsolutePosition.X
-            local frameSize = sliderBackground.AbsoluteSize.X
-            
-            local relativePos = (mousePos - framePos) / frameSize
-            local value = min + ((max - min) * relativePos)
-            
-            slider:SetValue(value)
-        end
-    end)
-    
-    -- Initialize
-    slider.UI = self
-    self.Flags[id] = default
-    slider:SetValue(default)
-    
-    return slider
-end
-
-function NovaUI:AddDropdown(section, id, options)
-    options = options or {}
-    
-    local values = options.Values or {}
-    local default = options.Default
-    local multiSelect = options.Multi == true
-    
-    -- Create dropdown container
-    local container = Create "Frame" {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 36),
-        Parent = section.Container
-    }
-    
-    -- Title
-    local title = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(1, 0, 0, 20),
-        Text = options.Title or "Dropdown",
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container
-    }
-    
-    -- Description
-    if options.Description then
-        container.Size = UDim2.new(1, 0, 0, 50)
-        
-        local description = Create "TextLabel" {
+        -- Label container
+        interface.LabelHolder = Creator.New("Frame", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
             BackgroundTransparency = 1,
-            Font = self.Font,
-            Position = UDim2.fromOffset(0, 22),
-            Size = UDim2.new(1, -140, 0, 14),
-            Text = options.Description,
-            TextColor3 = ApplyTheme("SubText", self.Theme),
-            TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = container
-        }
-    end
-    
-    -- Create dropdown button
-    local dropdownButton = Create "TextButton" {
-        AnchorPoint = Vector2.new(1, 1),
-        BackgroundColor3 = ApplyTheme("Dropdown", self.Theme),
-        Font = self.Font,
-        Position = UDim2.new(1, 0, 1, 0),
-        Size = UDim2.new(0, 140, 0, 30),
-        Text = "Select...",
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        AutoButtonColor = false,
-        ClipsDescendants = true,
-        Parent = container
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(0, 4),
-        Parent = dropdownButton
-    }
-    
-    Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", self.Theme),
-        Thickness = 1,
-        Parent = dropdownButton
-    }
-    
-    -- Dropdown arrow
-    local dropdownArrow = Create "ImageLabel" {
-        AnchorPoint = Vector2.new(1, 0.5),
-        BackgroundTransparency = 1,
-        Image = "rbxassetid://7072706796", -- Down arrow
-        Position = UDim2.new(1, -5, 0.5, 0),
-        Size = UDim2.fromOffset(16, 16),
-        ImageColor3 = ApplyTheme("SubText", self.Theme),
-        Parent = dropdownButton
-    }
-    
-    -- Create dropdown list
-    local dropdownList = Create "Frame" {
-        BackgroundColor3 = ApplyTheme("Dropdown", self.Theme),
-        Position = UDim2.fromOffset(dropdownButton.AbsolutePosition.X, dropdownButton.AbsolutePosition.Y + 30),
-        Size = UDim2.new(0, 140, 0, 0),
-        Visible = false,
-        ZIndex = 10,
-        Parent = self.ScreenGui
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(0, 4),
-        Parent = dropdownList
-    }
-    
-    Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", self.Theme),
-        Thickness = 1,
-        Parent = dropdownList
-    }
-    
-    local dropdownScroll = Create "ScrollingFrame" {
-        Active = true,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Position = UDim2.fromOffset(5, 5),
-        Size = UDim2.new(1, -10, 1, -10),
-        CanvasSize = UDim2.fromScale(0, 0),
-        ScrollBarThickness = 4,
-        ScrollBarImageColor3 = ApplyTheme("SubText", self.Theme),
-        ScrollBarImageTransparency = 0.5,
-        ZIndex = 10,
-        Parent = dropdownList
-    }
-    
-    local listLayout = Create "UIListLayout" {
-        Padding = UDim.new(0, 2),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = dropdownScroll
-    }
-    
-    -- Create dropdown object
-    local dropdown = {
-        Type = "Dropdown",
-        Title = title,
-        Button = dropdownButton,
-        List = dropdownList,
-        Scroll = dropdownScroll,
-        Container = container,
-        Values = values,
-        Selected = multiSelect and {} or default,
-        Multi = multiSelect,
-        AllowNull = options.AllowNull == true,
-        Callback = options.Callback,
-        Open = false,
+            Position = UDim2.fromOffset(10, 0),
+            Size = UDim2.new(1, -28, 0, 0)
+        }, {
+            Creator.New("UIListLayout", {
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                VerticalAlignment = Enum.VerticalAlignment.Center
+            }),
+            Creator.New("UIPadding", {
+                PaddingBottom = UDim.new(0, 13),
+                PaddingTop = UDim.new(0, 13)
+            }),
+            interface.TitleLabel,
+            interface.DescLabel
+        })
         
-        SetValues = function(self, newValues)
-            self.Values = newValues
-            self:Refresh()
-        end,
+        -- Border
+        interface.Border = Creator.New("UIStroke", {
+            Transparency = 0.5,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+            Color = Color3.fromRGB(0, 0, 0),
+            ThemeTag = {Color = "ElementBorder"}
+        })
         
-        SetValue = function(self, value)
-            if self.Multi then
-                -- For multi-select
-                self.Selected = value or {}
+        -- Main element frame
+        interface.Frame = Creator.New("TextButton", {
+            Size = UDim2.new(1, 0, 0, 0),
+            BackgroundTransparency = 0.89,
+            BackgroundColor3 = Color3.fromRGB(130, 130, 130),
+            Parent = container,
+            AutomaticSize = Enum.AutomaticSize.Y,
+            Text = "",
+            LayoutOrder = 7,
+            ThemeTag = {
+                BackgroundColor3 = "Element",
+                BackgroundTransparency = "ElementTransparency"
+            }
+        }, {
+            Creator.New("UICorner", {
+                CornerRadius = UDim.new(0, 4)
+            }),
+            interface.Border,
+            interface.LabelHolder
+        })
+        
+        -- Set title text
+        function interface.SetTitle(_, text)
+            interface.TitleLabel.Text = text
+        end
+        
+        -- Set description text
+        function interface.SetDesc(_, text)
+            if text == nil then
+                text = ""
+            end
+            
+            if text == "" then
+                interface.DescLabel.Visible = false
             else
-                -- For single select
-                self.Selected = value
+                interface.DescLabel.Visible = true
             end
             
-            self:UpdateText()
-            
-            if self.Callback then
-                self.Callback(self.Selected)
-            end
-            
-            self.UI.Flags[id] = self.Selected
-        end,
+            interface.DescLabel.Text = text
+        end
         
-        UpdateText = function(self)
-            local selected = self.Selected
-            
-            if self.Multi then
-                local count = 0
-                for _ in pairs(selected) do count = count + 1 end
-                
-                if count == 0 then
-                    self.Button.Text = "Select..."
-                elseif count == 1 then
-                    for value, _ in pairs(selected) do
-                        self.Button.Text = value
-                        break
-                    end
-                else
-                    self.Button.Text = count .. " selected"
-                end
-            else
-                self.Button.Text = selected or "Select..."
-            end
-        end,
+        -- Destroy element
+        function interface.Destroy(_)
+            interface.Frame:Destroy()
+        end
         
-        Refresh = function(self)
-            -- Clear existing options
-            for _, child in ipairs(self.Scroll:GetChildren()) do
-                if not child:IsA("UIListLayout") then
-                    child:Destroy()
-                end
-            end
-            
-            -- Add options
-            for _, value in ipairs(self.Values) do
-                local option = Create "TextButton" {
-                    BackgroundColor3 = ApplyTheme("DropdownOption", self.UI.Theme),
-                    Font = self.UI.Font,
-                    Size = UDim2.new(1, 0, 0, 24),
-                    Text = value,
-                    TextColor3 = ApplyTheme("Text", self.UI.Theme),
-                    TextSize = 14,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    AutoButtonColor = false,
-                    ZIndex = 10,
-                    Parent = self.Scroll
-                }
-                
-                Create "UIPadding" {
-                    PaddingLeft = UDim.new(0, 8),
-                    Parent = option
-                }
-                
-                -- Selection indicator
-                local selected = false
-                
-                if self.Multi then
-                    selected = self.Selected[value] == true
-                else
-                    selected = self.Selected == value
-                end
-                
-                -- Selection visual
-                local indicator = Create "Frame" {
-                    AnchorPoint = Vector2.new(1, 0.5),
-                    BackgroundColor3 = ApplyTheme("Accent", self.UI.Theme),
-                    BackgroundTransparency = selected and 0 or 1,
-                    Position = UDim2.new(1, -8, 0.5, 0),
-                    Size = UDim2.fromOffset(4, 14),
-                    ZIndex = 10,
-                    Parent = option
-                }
-                
-                Create "UICorner" {
-                    CornerRadius = UDim.new(1, 0),
-                    Parent = indicator
-                }
-                
-                -- Option hover effect
-                self.UI:AddConnection(option.MouseEnter, function()
-                    Tween(option, {BackgroundColor3 = ApplyTheme("ButtonHover", self.UI.Theme)})
-                end)
-                
-                self.UI:AddConnection(option.MouseLeave, function()
-                    Tween(option, {BackgroundColor3 = ApplyTheme("DropdownOption", self.UI.Theme)})
-                end)
-                
-                -- Option selection
-                self.UI:AddConnection(option.MouseButton1Click, function()
-                    if self.Multi then
-                        -- For multi-select
-                        self.Selected[value] = not self.Selected[value] or nil
-                        indicator.BackgroundTransparency = self.Selected[value] and 0 or 1
-                    else
-                        -- For single select
-                        if self.Selected == value and self.AllowNull then
-                            self.Selected = nil
-                        else
-                            self.Selected = value
-                        end
-                        
-                        self:Close()
-                    end
-                    
-                    self:UpdateText()
-                    
-                    if self.Callback then
-                        self.Callback(self.Selected)
-                    end
-                    
-                    self.UI.Flags[id] = self.Selected
-                end)
-            end
-            
-            -- Update canvas size
-            self.Scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
-            
-            -- Calculate dropdown list height (max 200)
-            local height = math.min(listLayout.AbsoluteContentSize.Y + 10, 200)
-            self.List.Size = UDim2.new(0, 140, 0, height)
-        end,
+        -- Initialize with provided title and description
+        interface:SetTitle(title)
+        interface:SetDesc(description)
         
-        Toggle = function(self)
-            self.Open = not self.Open
+        -- Add hover effects for interactive elements
+        if isInteractable then
+            local _, setTransparency = Creator.SpringMotor(
+                Creator.GetThemeProperty("ElementTransparency"),
+                interface.Frame,
+                "BackgroundTransparency",
+                false,
+                true
+            )
             
-            if self.Open then
-                self:Open()
-            else
-                self:Close()
-            end
-        end,
-        
-        Open = function(self)
-            self.Open = true
-            
-            -- Position dropdown properly
-            local buttonPos = self.Button.AbsolutePosition
-            local buttonSize = self.Button.AbsoluteSize
-            
-            self.List.Position = UDim2.fromOffset(buttonPos.X, buttonPos.Y + buttonSize.Y)
-            self.List.Visible = true
-            
-            -- Update the list options
-            self:Refresh()
-            
-            -- Close when clicking outside
-            self._connection = self.UI:AddConnection(UserInputService.InputBegan, function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    local position = UserInputService:GetMouseLocation()
-                    local inlist = position.X > self.List.AbsolutePosition.X and
-                                   position.X < self.List.AbsolutePosition.X + self.List.AbsoluteSize.X and
-                                   position.Y > self.List.AbsolutePosition.Y and
-                                   position.Y < self.List.AbsolutePosition.Y + self.List.AbsoluteSize.Y
-                                   
-                    local inbutton = position.X > self.Button.AbsolutePosition.X and
-                                     position.X < self.Button.AbsolutePosition.X + self.Button.AbsoluteSize.X and
-                                     position.Y > self.Button.AbsolutePosition.Y and
-                                     position.Y < self.Button.AbsolutePosition.Y + self.Button.AbsoluteSize.Y
-                    
-                    if not inlist and not inbutton then
-                        self:Close()
-                    end
-                end
+            Creator.AddSignal(interface.Frame.MouseEnter, function()
+                setTransparency(Creator.GetThemeProperty("ElementTransparency") - Creator.GetThemeProperty("HoverChange"))
             end)
-        end,
-        
-        Close = function(self)
-            self.Open = false
-            self.List.Visible = false
             
-            if self._connection then
-                self._connection:Disconnect()
-                self._connection = nil
-            end
-        end
-    }
-    
-    -- Button behavior
-    self:AddConnection(dropdownButton.MouseButton1Click, function()
-        dropdown:Toggle()
-    end)
-    
-    -- Initialize
-    dropdown.UI = self
-    
-    -- Set default value
-    if multiSelect then
-        local selected = {}
-        
-        if type(default) == "table" then
-            for _, value in ipairs(default) do
-                selected[value] = true
-            end
-        end
-        
-        dropdown.Selected = selected
-        self.Flags[id] = selected
-    else
-        dropdown.Selected = default
-        self.Flags[id] = default
-    end
-    
-    dropdown:UpdateText()
-    
-    return dropdown
-end
-
-function NovaUI:AddLabel(section, text)
-    -- Create label container
-    local container = Create "Frame" {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 20),
-        Parent = section.Container
-    }
-    
-    -- Create label
-    local label = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.fromScale(1, 1),
-        Text = text or "",
-        TextColor3 = ApplyTheme("SubText", self.Theme),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container
-    }
-    
-    -- Create label object
-    local labelObj = {
-        Type = "Label",
-        Label = label,
-        Container = container,
-        SetText = function(self, newText)
-            self.Label.Text = newText
-        end
-    }
-    
-    return labelObj
-end
-
-function NovaUI:AddInput(section, id, options)
-    options = options or {}
-    
-    -- Create input container
-    local container = Create "Frame" {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 36),
-        Parent = section.Container
-    }
-    
-    -- Title
-    local title = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(1, 0, 0, 20),
-        Text = options.Title or "Input",
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container
-    }
-    
-    -- Description
-    if options.Description then
-        container.Size = UDim2.new(1, 0, 0, 50)
-        
-        local description = Create "TextLabel" {
-            BackgroundTransparency = 1,
-            Font = self.Font,
-            Position = UDim2.fromOffset(0, 22),
-            Size = UDim2.new(1, -140, 0, 14),
-            Text = options.Description,
-            TextColor3 = ApplyTheme("SubText", self.Theme),
-            TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = container
-        }
-    end
-    
-    -- Create input box
-    local inputBox = Create "Frame" {
-        AnchorPoint = Vector2.new(1, 1),
-        BackgroundColor3 = ApplyTheme("Button", self.Theme),
-        Position = UDim2.new(1, 0, 1, 0),
-        Size = UDim2.new(0, 140, 0, 30),
-        Parent = container
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(0, 4),
-        Parent = inputBox
-    }
-    
-    Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", self.Theme),
-        Thickness = 1,
-        Parent = inputBox
-    }
-    
-    local textBox = Create "TextBox" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        PlaceholderColor3 = ApplyTheme("SubText", self.Theme),
-        PlaceholderText = options.Placeholder or "Enter text...",
-        Position = UDim2.fromOffset(10, 0),
-        Size = UDim2.new(1, -20, 1, 0),
-        Text = options.Default or "",
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ClearTextOnFocus = options.ClearTextOnFocus ~= false,
-        Parent = inputBox
-    }
-    
-    -- Create input object
-    local input = {
-        Type = "Input",
-        Title = title,
-        Box = textBox,
-        Container = container,
-        Value = options.Default or "",
-        Callback = options.Callback,
-        Finished = options.Finished == true,
-        Numeric = options.Numeric == true,
-        
-        SetValue = function(self, value)
-            if self.Numeric and type(value) == "string" then
-                if value ~= "" and not tonumber(value) then
-                    return
-                end
-            end
+            Creator.AddSignal(interface.Frame.MouseLeave, function()
+                setTransparency(Creator.GetThemeProperty("ElementTransparency"))
+            end)
             
-            self.Value = value
-            self.Box.Text = value
+            Creator.AddSignal(interface.Frame.MouseButton1Down, function()
+                setTransparency(Creator.GetThemeProperty("ElementTransparency") + Creator.GetThemeProperty("HoverChange"))
+            end)
             
-            if self.Callback then
-                self.Callback(value)
-            end
-            
-            self.UI.Flags[id] = value
-        end
-    }
-    
-    -- Input behavior
-    if options.Finished then
-        self:AddConnection(textBox.FocusLost, function(enterPressed)
-            if enterPressed then
-                input:SetValue(textBox.Text)
-            end
-        end)
-    else
-        self:AddConnection(textBox:GetPropertyChangedSignal("Text"), function()
-            input:SetValue(textBox.Text)
-        end)
-    end
-    
-    -- Initialize
-    input.UI = self
-    self.Flags[id] = options.Default or ""
-    
-    return input
-end
-
-function NovaUI:AddKeybind(section, id, options)
-    options = options or {}
-    
-    -- Create keybind container
-    local container = Create "Frame" {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 36),
-        Parent = section.Container
-    }
-    
-    -- Title
-    local title = Create "TextLabel" {
-        BackgroundTransparency = 1,
-        Font = self.Font,
-        Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(1, 0, 0, 20),
-        Text = options.Title or "Keybind",
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = container
-    }
-    
-    -- Description
-    if options.Description then
-        container.Size = UDim2.new(1, 0, 0, 50)
-        
-        local description = Create "TextLabel" {
-            BackgroundTransparency = 1,
-            Font = self.Font,
-            Position = UDim2.fromOffset(0, 22),
-            Size = UDim2.new(1, -140, 0, 14),
-            Text = options.Description,
-            TextColor3 = ApplyTheme("SubText", self.Theme),
-            TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = container
-        }
-    end
-    
-    -- Create keybind button
-    local keybindButton = Create "TextButton" {
-        AnchorPoint = Vector2.new(1, 1),
-        BackgroundColor3 = ApplyTheme("Button", self.Theme),
-        Font = self.Font,
-        Position = UDim2.new(1, 0, 1, 0),
-        Size = UDim2.new(0, 100, 0, 30),
-        Text = "None",
-        TextColor3 = ApplyTheme("Text", self.Theme),
-        TextSize = 14,
-        AutoButtonColor = false,
-        Parent = container
-    }
-    
-    Create "UICorner" {
-        CornerRadius = UDim.new(0, 4),
-        Parent = keybindButton
-    }
-    
-    Create "UIStroke" {
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Color = ApplyTheme("Border", self.Theme),
-        Thickness = 1,
-        Parent = keybindButton
-    }
-    
-    -- Key name conversion
-    local function GetKeyName(input)
-        if input == nil then
-            return "None"
-        end
-        
-        -- Mouse button names
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            return "MB1"
-        elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-            return "MB2"
-        elseif input.UserInputType == Enum.UserInputType.MouseButton3 then
-            return "MB3"
-        end
-        
-        -- Special key names
-        local keyNameMap = {
-            [Enum.KeyCode.Unknown] = "None",
-            [Enum.KeyCode.LeftControl] = "LCtrl",
-            [Enum.KeyCode.RightControl] = "RCtrl",
-            [Enum.KeyCode.LeftShift] = "LShift",
-            [Enum.KeyCode.RightShift] = "RShift",
-            [Enum.KeyCode.LeftAlt] = "LAlt",
-            [Enum.KeyCode.RightAlt] = "RAlt",
-        }
-        
-        if input.KeyCode and keyNameMap[input.KeyCode] then
-            return keyNameMap[input.KeyCode]
-        end
-        
-        -- Default key name
-        return input.KeyCode and input.KeyCode.Name or "None"
-    end
-    
-    -- Create keybind object
-    local keybind = {
-        Type = "Keybind",
-        Title = title,
-        Button = keybindButton,
-        Container = container,
-        Value = options.Default,
-        Mode = options.Mode or "Toggle", -- Toggle, Hold, Always
-        Listening = false,
-        Callback = options.Callback,
-        
-        SetValue = function(self, value)
-            self.Value = value
-            self.Button.Text = GetKeyName({KeyCode = value})
-            
-            if self.Callback then
-                self.Callback(value)
-            end
-            
-            self.UI.Flags[id] = value
-        end,
-        
-        StartListening = function(self)
-            self.Listening = true
-            self.Button.Text = "..."
-            
-            local inputConnection
-            inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-                if gameProcessed then return end
-                
-                if input.UserInputType == Enum.UserInputType.Keyboard or
-                   input.UserInputType == Enum.UserInputType.MouseButton1 or
-                   input.UserInputType == Enum.UserInputType.MouseButton2 or
-                   input.UserInputType == Enum.UserInputType.MouseButton3 then
-                    
-                    local keyCode = input.UserInputType.Name:find("MouseButton") and input.UserInputType or input.KeyCode
-                    self:SetValue(keyCode)
-                    
-                    self.Listening = false
-                    inputConnection:Disconnect()
-                end
+            Creator.AddSignal(interface.Frame.MouseButton1Up, function()
+                setTransparency(Creator.GetThemeProperty("ElementTransparency") - Creator.GetThemeProperty("HoverChange"))
             end)
         end
-    }
-    
-    -- Button behavior
-    self:AddConnection(keybindButton.MouseButton1Click, function()
-        if not keybind.Listening then
-            keybind:StartListening()
-        end
-    end)
-    
-    -- Right-click to clear
-    self:AddConnection(keybindButton.MouseButton2Click, function()
-        keybind:SetValue(nil)
-    end)
-    
-    -- Keybind detection
-    self:AddConnection(UserInputService.InputBegan, function(input, gameProcessed)
-        if gameProcessed or keybind.Listening or not keybind.Value then return end
         
-        local inputType = input.UserInputType
-        local keyCode = input.KeyCode
-        
-        local isMatch = false
-        
-        if (inputType == Enum.UserInputType.Keyboard and keyCode == keybind.Value) or
-           (inputType.Name:find("MouseButton") and inputType == keybind.Value) then
-            isMatch = true
-        end
-        
-        if isMatch then
-            if keybind.Mode == "Toggle" or keybind.Mode == "Always" then
-                if keybind.Callback then
-                    keybind.Callback(keybind.Value)
-                end
-            end
-        end
-    end)
-    
-    self:AddConnection(UserInputService.InputEnded, function(input, gameProcessed)
-        if gameProcessed or keybind.Listening or not keybind.Value then return end
-        
-        local inputType = input.UserInputType
-        local keyCode = input.KeyCode
-        
-        local isMatch = false
-        
-        if (inputType == Enum.UserInputType.Keyboard and keyCode == keybind.Value) or
-           (inputType.Name:find("MouseButton") and inputType == keybind.Value) then
-            isMatch = true
-        end
-        
-        if isMatch and keybind.Mode == "Hold" then
-            if keybind.Callback then
-                keybind.Callback(keybind.Value)
-            end
-        end
-    end)
-    
-    -- Initialize
-    keybind.UI = self
-    self.Flags[id] = options.Default
-    
-    if options.Default then
-        keybind:SetValue(options.Default)
+        return interface
     end
-    
-    return keybind
-end
 
--- Save configuration
-function NovaUI:SaveConfig(name)
-    local config = {
-        flags = self.Flags
-    }
-    
-    if writefile then
-        local success, err = pcall(function()
-            local folder = "NovaUI"
-            local subfolder = folder .. "/configs"
-            
-            if not isfolder(folder) then
-                makefolder(folder)
-            end
-            
-            if not isfolder(subfolder) then
-                makefolder(subfolder)
-            end
-            
-            writefile(subfolder .. "/" .. name .. ".json", HttpService:JSONEncode(config))
+    -- Button Component
+    Components.Button = function(title, container, isCompact)
+        isCompact = isCompact or false
+        
+        local interface = {}
+        
+        -- Button title label
+        interface.Title = Creator.New("TextLabel", {
+            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
+            TextColor3 = Color3.fromRGB(200, 200, 200),
+            TextSize = 14,
+            TextWrapped = true,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            TextYAlignment = Enum.TextYAlignment.Center,
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            ThemeTag = {TextColor3 = "Text"}
+        })
+        
+        -- Hover effect frame
+        interface.HoverFrame = Creator.New("Frame", {
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            ThemeTag = {BackgroundColor3 = "Hover"}
+        }, {
+            Creator.New("UICorner", {
+                CornerRadius = UDim.new(0, 4)
+            })
+        })
+        
+        -- Main button frame
+        interface.Frame = Creator.New("TextButton", {
+            Size = UDim2.new(0, 0, 0, 32),
+            Parent = container,
+            ThemeTag = {BackgroundColor3 = "DialogButton"}
+        }, {
+            Creator.New("UICorner", {
+                CornerRadius = UDim.new(0, 4)
+            }),
+            Creator.New("UIStroke", {
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                Transparency = 0.65,
+                ThemeTag = {Color = "DialogButtonBorder"}
+            }),
+            interface.HoverFrame,
+            interface.Title
+        })
+        
+        -- Set up hover animations
+        local _, setTransparency = Creator.SpringMotor(1, interface.HoverFrame, "BackgroundTransparency", isCompact)
+        
+        Creator.AddSignal(interface.Frame.MouseEnter, function()
+            setTransparency(0.97)
         end)
         
-        return success
-    end
-    
-    return false
-end
-
--- Load configuration
-function NovaUI:LoadConfig(name)
-    if readfile then
-        local success, result = pcall(function()
-            local content = readfile("NovaUI/configs/" .. name .. ".json")
-            return HttpService:JSONDecode(content)
+        Creator.AddSignal(interface.Frame.MouseLeave, function()
+            setTransparency(1)
         end)
         
-        if success and result and result.flags then
-            for id, value in pairs(result.flags) do
-                if self.Flags[id] ~= nil then
-                    self.Flags[id] = value
+        Creator.AddSignal(interface.Frame.MouseButton1Down, function()
+            setTransparency(1)
+        end)
+        
+        Creator.AddSignal(interface.Frame.MouseButton1Up, function()
+            setTransparency(0.97)
+        end)
+        
+        return interface
+    end
+
+    -- Notification Component
+    Components.Notification = {
+        Holder = nil
+    }
+
+    function Components.Notification.Init(self, parent)
+        self.Holder = Creator.New("Frame", {
+            Position = UDim2.new(1, -30, 1, -30),
+            Size = UDim2.new(0, 310, 1, -30),
+            AnchorPoint = Vector2.new(1, 1),
+            BackgroundTransparency = 1,
+            Parent = parent
+        }, {
+            Creator.New("UIListLayout", {
+                HorizontalAlignment = Enum.HorizontalAlignment.Center,
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                VerticalAlignment = Enum.VerticalAlignment.Bottom,
+                Padding = UDim.new(0, 20)
+            })
+        })
+    end
+
+    function Components.Notification.New(self, options)
+        options.Title = options.Title or "Title"
+        options.Content = options.Content or "Content"
+        options.SubContent = options.SubContent or ""
+        options.Duration = options.Duration or nil
+        options.Buttons = options.Buttons or {}
+        
+        local interface = {Closed = false}
+        
+        -- Create acrylic background
+        interface.AcrylicPaint = Acrylic.AcrylicPaint()
+        
+        -- Create title
+        interface.Title = Creator.New("TextLabel", {
+            Position = UDim2.new(0, 14, 0, 17),
+            Text = options.Title,
+            RichText = true,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            TextTransparency = 0,
+            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
+            TextSize = 13,
+            TextXAlignment = "Left",
+            TextYAlignment = "Center",
+            Size = UDim2.new(1, -12, 0, 12),
+            TextWrapped = true,
+            BackgroundTransparency = 1,
+            ThemeTag = {TextColor3 = "Text"}
+        })
+        
+        -- Create content labels
+        interface.ContentLabel = Creator.New("TextLabel", {
+            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
+            Text = options.Content,
+            TextColor3 = Color3.fromRGB(240, 240, 240),
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            AutomaticSize = Enum.AutomaticSize.Y,
+            Size = UDim2.new(1, 0, 0, 14),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundTransparency = 1,
+            TextWrapped = true,
+            ThemeTag = {TextColor3 = "Text"}
+        })
+        
+        interface.SubContentLabel = Creator.New("TextLabel", {
+            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
+            Text = options.SubContent,
+            TextColor3 = Color3.fromRGB(240, 240, 240),
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            AutomaticSize = Enum.AutomaticSize.Y,
+            Size = UDim2.new(1, 0, 0, 14),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundTransparency = 1,
+            TextWrapped = true,
+            ThemeTag = {TextColor3 = "SubText"}
+        })
+        
+        -- Create label container
+        interface.LabelHolder = Creator.New("Frame", {
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(14, 40),
+            Size = UDim2.new(1, -28, 0, 0)
+        }, {
+            Creator.New("UIListLayout", {
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Padding = UDim.new(0, 3)
+            }),
+            interface.ContentLabel,
+            interface.SubContentLabel
+        })
+        
+        -- Create close button
+        interface.CloseButton = Creator.New("TextButton", {
+            Text = "",
+            Position = UDim2.new(1, -14, 0, 13),
+            Size = UDim2.fromOffset(20, 20),
+            AnchorPoint = Vector2.new(1, 0),
+            BackgroundTransparency = 1
+        }, {
+            Creator.New("ImageLabel", {
+                Image = "rbxassetid://9886659671", -- Close icon
+                Size = UDim2.fromOffset(16, 16),
+                Position = UDim2.fromScale(0.5, 0.5),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundTransparency = 1,
+                ThemeTag = {ImageColor3 = "Text"}
+            })
+        })
+        
+        -- Main notification frame
+        interface.Root = Creator.New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 1, 0),
+            Position = UDim2.fromScale(1, 0)
+        }, {
+            interface.AcrylicPaint.Frame,
+            interface.Title,
+            interface.CloseButton,
+            interface.LabelHolder
+        })
+        
+        -- Handle empty content
+        if options.Content == "" then
+            interface.ContentLabel.Visible = false
+        end
+        
+        if options.SubContent == "" then
+            interface.SubContentLabel.Visible = false
+        end
+        
+        -- Create holder frame
+        interface.Holder = Creator.New("Frame", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 200),
+            Parent = self.Holder
+        }, {
+            interface.Root
+        })
+        
+        -- Set up slide animation
+        local slideMotor = Flipper.GroupMotor.new({
+            Scale = 1,
+            Offset = 60
+        })
+        
+        slideMotor:onStep(function(values)
+            interface.Root.Position = UDim2.new(values.Scale, values.Offset, 0, 0)
+        end)
+        
+        -- Connect close button
+        Creator.AddSignal(interface.CloseButton.MouseButton1Click, function()
+            interface:Close()
+        end)
+        
+        -- Open animation
+        function interface.Open(_)
+            local labelHeight = interface.LabelHolder.AbsoluteSize.Y
+            interface.Holder.Size = UDim2.new(1, 0, 0, 58 + labelHeight)
+            
+            slideMotor:setGoal({
+                Scale = Flipper.Spring.new(0, {frequency = 5}),
+                Offset = Flipper.Spring.new(0, {frequency = 5})
+            })
+        end
+        
+        -- Close animation
+        function interface.Close(_)
+            if not interface.Closed then
+                interface.Closed = true
+                
+                task.spawn(function()
+                    slideMotor:setGoal({
+                        Scale = Flipper.Spring.new(1, {frequency = 5}),
+                        Offset = Flipper.Spring.new(60, {frequency = 5})
+                    })
                     
-                    -- Find and update elements with this id
-                    for _, tab in ipairs(self.Tabs) do
-                        for _, section in ipairs(tab.Sections) do
-                            for _, element in ipairs(section.Elements) do
-                                if element.ID == id and element.SetValue then
-                                    element:SetValue(value)
-                                end
-                            end
-                        end
+                    task.wait(0.4)
+                    if Celestial.UseAcrylic then
+                        interface.AcrylicPaint.Model:Destroy()
                     end
+                    interface.Holder:Destroy()
+                end)
+            end
+        end
+        
+        -- Open the notification
+        interface:Open()
+        
+        -- Auto-close after duration
+        if options.Duration then
+            task.delay(options.Duration, function()
+                interface:Close()
+            end)
+        end
+        
+        return interface
+    end
+
+    -- Dialog Component
+    Components.Dialog = {Window = nil}
+
+    function Components.Dialog.Init(self, window)
+        self.Window = window
+        return self
+    end
+
+    function Components.Dialog.Create(_)
+        local interface = {Buttons = 0}
+        
+        -- Create the dialog background tint
+        interface.TintFrame = Creator.New("TextButton", {
+            Text = "",
+            Size = UDim2.fromScale(1, 1),
+            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+            BackgroundTransparency = 1,
+            Parent = Components.Dialog.Window.Root
+        }, {
+            Creator.New("UICorner", {
+                CornerRadius = UDim.new(0, 8)
+            })
+        })
+        
+        -- Set up animations
+        local _, setTintTransparency = Creator.SpringMotor(1, interface.TintFrame, "BackgroundTransparency", true)
+        
+        -- Button container
+        interface.ButtonHolder = Creator.New("Frame", {
+            Size = UDim2.new(1, -40, 1, -40),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            BackgroundTransparency = 1
+        }, {
+            Creator.New("UIListLayout", {
+                Padding = UDim.new(0, 10),
+                FillDirection = Enum.FillDirection.Horizontal,
+                HorizontalAlignment = Enum.HorizontalAlignment.Center,
+                SortOrder = Enum.SortOrder.LayoutOrder
+            })
+        })
+        
+        -- Button container frame with divider
+        interface.ButtonHolderFrame = Creator.New("Frame", {
+            Size = UDim2.new(1, 0, 0, 70),
+            Position = UDim2.new(0, 0, 1, -70),
+            ThemeTag = {BackgroundColor3 = "DialogHolder"}
+        }, {
+            Creator.New("Frame", {
+                Size = UDim2.new(1, 0, 0, 1),
+                ThemeTag = {BackgroundColor3 = "DialogHolderLine"}
+            }),
+            interface.ButtonHolder
+        })
+        
+        -- Dialog title
+        interface.Title = Creator.New("TextLabel", {
+            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
+            Text = "Dialog",
+            TextColor3 = Color3.fromRGB(240, 240, 240),
+            TextSize = 22,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Size = UDim2.new(1, 0, 0, 22),
+            Position = UDim2.fromOffset(20, 25),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundTransparency = 1,
+            ThemeTag = {TextColor3 = "Text"}
+        })
+        
+        -- Scale animation
+        interface.Scale = Creator.New("UIScale", {Scale = 1})
+        local _, setScale = Creator.SpringMotor(1.1, interface.Scale, "Scale")
+        
+        -- Main dialog container
+        interface.Root = Creator.New("CanvasGroup", {
+            Size = UDim2.fromOffset(300, 165),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            GroupTransparency = 1,
+            Parent = interface.TintFrame,
+            ThemeTag = {BackgroundColor3 = "Dialog"}
+        }, {
+            Creator.New("UICorner", {
+                CornerRadius = UDim.new(0, 8)
+            }),
+            Creator.New("UIStroke", {
+                Transparency = 0.5,
+                ThemeTag = {Color = "DialogBorder"}
+            }),
+            interface.Scale,
+            interface.Title,
+            interface.ButtonHolderFrame
+        })
+        
+        -- Dialog open/close animations
+        local _, setTransparency = Creator.SpringMotor(1, interface.Root, "GroupTransparency")
+        
+        function interface.Open(_)
+            Celestial.DialogOpen = true
+            interface.Scale.Scale = 1.1
+            setTintTransparency(0.75)
+            setTransparency(0)
+            setScale(1)
+        end
+        
+        function interface.Close(_)
+            Celestial.DialogOpen = false
+            setTintTransparency(1)
+            setTransparency(1)
+            setScale(1.1)
+            interface.Root.UIStroke:Destroy()
+            task.wait(0.15)
+            interface.TintFrame:Destroy()
+        end
+        
+        -- Add a button to the dialog
+        function interface.Button(_, text, callback)
+            interface.Buttons = interface.Buttons + 1
+            text = text or "Button"
+            callback = callback or function() end
+            
+            local buttonComponent = Components.Button(text, interface.ButtonHolder, true)
+            buttonComponent.Title.Text = text
+            
+            -- Resize buttons to fit evenly
+            for _, child in next, interface.ButtonHolder:GetChildren() do
+                if child:IsA("TextButton") then
+                    child.Size = UDim2.new(1/interface.Buttons, -(((interface.Buttons-1)*10)/interface.Buttons), 0, 32)
                 end
             end
             
-            return true
+            -- Connect button callback
+            Creator.AddSignal(buttonComponent.Frame.MouseButton1Click, function()
+                Celestial:SafeCallback(callback)
+                pcall(function() interface:Close() end)
+            end)
+            
+            return buttonComponent
         end
+        
+        return interface
     end
-    
-    return false
+
+    -- More component definitions would go here
+    -- Section, Tab, Window, TitleBar, etc.
 end
 
--- Get all configurations
-function NovaUI:GetConfigs()
-    local configs = {}
-    
-    if listfiles then
-        local success, result = pcall(function()
-            return listfiles("NovaUI/configs")
+--//////////////////////////////////////////////////////////////////////////////////--
+--                               UI ELEMENT MODULES                                 --
+--//////////////////////////////////////////////////////////////////////////////////--
+
+-- Button Element
+do
+    local Button = {}
+    Button.__index = Button
+    Button.__type = "Button"
+
+    function Button.New(container, config)
+        assert(config.Title, "Button - Missing Title")
+        config.Callback = config.Callback or function() end
+        
+        local element = Components.Element(config.Title, config.Description, container.Container, true)
+        
+        -- Add button icon
+        local icon = Creator.New("ImageLabel", {
+            Image = "rbxassetid://10709791437",
+            Size = UDim2.fromOffset(16, 16),
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, -10, 0.5, 0),
+            BackgroundTransparency = 1,
+            Parent = element.Frame,
+            ThemeTag = {ImageColor3 = "Text"}
+        })
+        
+        -- Connect click callback
+        Creator.AddSignal(element.Frame.MouseButton1Click, function()
+            container.Library:SafeCallback(config.Callback)
         end)
         
-        if success and result then
-            for _, file in ipairs(result) do
-                -- Extract filename without extension
-                local filename = file:match("([^/\\]+)%.json$")
-                if filename then
-                    table.insert(configs, filename)
-                end
+        return element
+    end
+
+    Elements.Button = Button
+end
+
+-- Toggle Element
+do
+    local Toggle = {}
+    Toggle.__index = Toggle
+    Toggle.__type = "Toggle"
+
+    function Toggle.New(container, title, options)
+        local library = container.Library
+        
+        assert(options.Title, "Toggle - Missing Title")
+        
+        local toggle = {
+            Value = options.Default or false,
+            Callback = options.Callback or function() end,
+            Type = "Toggle"
+        }
+        
+        -- Create element
+        local element = Components.Element(options.Title, options.Description, container.Container, true)
+        element.DescLabel.Size = UDim2.new(1, -54, 0, 14)
+        
+        toggle.SetTitle = element.SetTitle
+        toggle.SetDesc = element.SetDesc
+        
+        -- Create toggle indicator
+        local indicatorIcon = Creator.New("ImageLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
+            Size = UDim2.fromOffset(14, 14),
+            Position = UDim2.new(0, 2, 0.5, 0),
+            Image = "rbxassetid://12266946128",
+            ImageTransparency = 0.5,
+            ThemeTag = {ImageColor3 = "ToggleSlider"}
+        })
+        
+        local strokeEffect = Creator.New("UIStroke", {
+            Transparency = 0.5,
+            ThemeTag = {Color = "ToggleSlider"}
+        })
+        
+        -- Create toggle background
+        local toggleBackground = Creator.New("Frame", {
+            Size = UDim2.fromOffset(36, 18),
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, -10, 0.5, 0),
+            Parent = element.Frame,
+            BackgroundTransparency = 1,
+            ThemeTag = {BackgroundColor3 = "Accent"}
+        }, {
+            Creator.New("UICorner", {
+                CornerRadius = UDim.new(0, 9)
+            }),
+            strokeEffect,
+            indicatorIcon
+        })
+        
+        -- Handle value changes
+        function toggle.OnChanged(self, callback)
+            toggle.Changed = callback
+            callback(toggle.Value)
+        end
+        
+        -- Set toggle value
+        function toggle.SetValue(self, value)
+            value = not not value -- Convert to boolean
+            toggle.Value = value
+            
+            -- Update the toggle appearance
+            Creator.OverrideTag(strokeEffect, {Color = toggle.Value and "Accent" or "ToggleSlider"})
+            Creator.OverrideTag(indicatorIcon, {ImageColor3 = toggle.Value and "ToggleToggled" or "ToggleSlider"})
+            
+            -- Animate the indicator
+            TweenService:Create(
+                indicatorIcon, 
+                TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), 
+                {Position = UDim2.new(0, toggle.Value and 19 or 2, 0.5, 0)}
+            ):Play()
+            
+            -- Animate the background
+            TweenService:Create(
+                toggleBackground, 
+                TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), 
+                {BackgroundTransparency = toggle.Value and 0 or 1}
+            ):Play()
+            
+            -- Update the icon transparency
+            indicatorIcon.ImageTransparency = toggle.Value and 0 or 0.5
+            
+            -- Call callbacks
+            library:SafeCallback(toggle.Callback, toggle.Value)
+            library:SafeCallback(toggle.Changed, toggle.Value)
+        end
+        
+        -- Cleanup
+        function toggle.Destroy(self)
+            element:Destroy()
+            library.Options[title] = nil
+        end
+        
+        -- Toggle on click
+        Creator.AddSignal(element.Frame.MouseButton1Click, function()
+            toggle:SetValue(not toggle.Value)
+        end)
+        
+        -- Initialize with default value
+        toggle:SetValue(toggle.Value)
+        
+        -- Register with library
+        library.Options[title] = toggle
+        
+        return toggle
+    end
+
+    Elements.Toggle = Toggle
+end
+
+-- Add the rest of your UI elements (Colorpicker, Dropdown, Slider, etc.) here
+
+--//////////////////////////////////////////////////////////////////////////////////--
+--                               MAIN CELESTIAL MODULE                              --
+--//////////////////////////////////////////////////////////////////////////////////--
+
+-- Initialize UI container
+local MainGui = Creator.New("ScreenGui", {
+    Parent = RunService:IsStudio() and LocalPlayer.PlayerGui or game:GetService("CoreGui")
+})
+
+local ProtectGui = protectgui or (syn and syn.protect_gui) or function() end
+ProtectGui(MainGui)
+
+Components.Notification:Init(MainGui)
+
+-- Library setup
+Celestial = {
+    Version = "1.0.0",
+    OpenFrames = {},
+    Options = {},
+    Themes = Themes.Names,
+    Window = nil,
+    WindowFrame = nil,
+    Unloaded = false,
+    Theme = "Dark",
+    DialogOpen = false,
+    UseAcrylic = false,
+    Acrylic = false,
+    Transparency = true,
+    MinimizeKeybind = nil,
+    MinimizeKey = Enum.KeyCode.LeftControl,
+    GUI = MainGui
+}
+
+-- Safely execute callbacks with error handling
+function Celestial.SafeCallback(_, callback, ...)
+    if not callback then 
+        return 
+    end
+    
+    local success, errorMsg = pcall(callback, ...)
+    if not success then
+        local _, endPos = errorMsg:find(":%d+: ")
+        if not endPos then 
+            return Celestial:Notify({
+                Title = "Celestial",
+                Content = "Callback error",
+                SubContent = errorMsg,
+                Duration = 5
+            })
+        end
+        
+        return Celestial:Notify({
+            Title = "Celestial",
+            Content = "Callback error",
+            SubContent = errorMsg:sub(endPos + 1),
+            Duration = 5
+        })
+    end
+end
+
+-- Precision rounding utility
+function Celestial.Round(_, value, decimalPlaces)
+    if decimalPlaces == 0 then 
+        return math.floor(value)
+    end
+    
+    value = tostring(value)
+    return value:find("%.") and tonumber(value:sub(1, value:find("%.")+decimalPlaces)) or value
+end
+
+-- Icon system
+local Icons = {
+    assets = {
+        ['lucide-close'] = 'rbxassetid://9886659671',
+        ['lucide-min'] = 'rbxassetid://9886659276',
+        ['lucide-max'] = 'rbxassetid://9886659406',
+        ['lucide-restore'] = 'rbxassetid://9886659001'
+        -- Add more icons as needed
+    }
+}
+
+function Celestial.GetIcon(_, name, specificIcon)
+    if specificIcon ~= nil and Icons.assets["lucide-"..specificIcon] then
+        return Icons.assets["lucide-"..specificIcon]
+    end
+    return nil
+end
+
+-- Element interface for UI components
+local ElementInterface = {}
+ElementInterface.__index = ElementInterface
+ElementInterface.__namecall = function(self, method, ...)
+    return ElementInterface[method](...)
+end
+
+-- Register all UI elements
+for _, Element in pairs(Elements) do
+    ElementInterface["Add"..Element.__type] = function(container, props, options)
+        Element.Container = container.Container
+        Element.Type = container.Type
+        Element.ScrollFrame = container.ScrollFrame
+        Element.Library = Celestial
+        return Element.New(container, props, options)
+    end
+end
+
+Celestial.Elements = ElementInterface
+
+-- Create the main window of the UI
+function Celestial.CreateWindow(_, config)
+    assert(config.Title, "Window - Missing Title")
+    
+    if Celestial.Window then
+        print("You cannot create more than one window.")
+        return
+    end
+    
+    Celestial.MinimizeKey = config.MinimizeKey
+    Celestial.UseAcrylic = config.Acrylic
+    
+    if config.Acrylic then
+        Acrylic.init()
+    end
+    
+    -- Create the window (simplified - in real implementation, this would call Window.lua)
+    local windowInstance = {
+        Parent = MainGui,
+        Size = config.Size,
+        Title = config.Title,
+        SubTitle = config.SubTitle,
+        TabWidth = config.TabWidth
+    }
+    
+    Celestial.Window = windowInstance
+    Celestial:SetTheme(config.Theme)
+    
+    return windowInstance
+end
+
+-- Set the UI theme
+function Celestial.SetTheme(_, themeName)
+    if Celestial.Window and table.find(Celestial.Themes, themeName) then
+        Celestial.Theme = themeName
+        Creator.UpdateTheme()
+    end
+end
+
+-- Cleanup and destroy the UI
+function Celestial.Destroy(_)
+    if Celestial.Window then
+        Celestial.Unloaded = true
+        
+        if Celestial.UseAcrylic then
+            Celestial.Window.AcrylicPaint.Model:Destroy()
+        end
+        
+        Creator.Disconnect()
+        Celestial.GUI:Destroy()
+    end
+end
+
+-- Toggle acrylic effect
+function Celestial.ToggleAcrylic(_, enabled)
+    if Celestial.Window then
+        if Celestial.UseAcrylic then
+            Celestial.Acrylic = enabled
+            Celestial.Window.AcrylicPaint.Model.Transparency = enabled and 0.98 or 1
+            
+            if enabled then
+                Acrylic.Enable()
+            else
+                Acrylic.Disable()
             end
         end
     end
-    
-    return configs
 end
 
--- Set autoload configuration
-function NovaUI:SetAutoloadConfig(name)
-    if writefile then
-        pcall(function()
-            local folder = "NovaUI"
-            
-            if not isfolder(folder) then
-                makefolder(folder)
-            end
-            
-            writefile(folder .. "/autoload.txt", name)
-        end)
+-- Toggle transparency effects
+function Celestial.ToggleTransparency(_, enabled)
+    if Celestial.Window then
+        Celestial.Window.AcrylicPaint.Frame.Background.BackgroundTransparency = enabled and 0.35 or 0
     end
 end
 
--- Load autoload configuration
-function NovaUI:LoadAutoloadConfig()
-    if readfile and isfile("NovaUI/autoload.txt") then
-        local success, name = pcall(function()
-            return readfile("NovaUI/autoload.txt")
-        end)
-        
-        if success and name and name ~= "" then
-            self:LoadConfig(name)
-            return true
-        end
-    end
-    
-    return false
+-- Display a notification
+function Celestial.Notify(_, options)
+    return Components.Notification:New(options)
 end
 
--- Cleanup resources
-function NovaUI:Destroy()
-    -- Disconnect all connections
-    for _, connection in ipairs(self.Connections) do
-        connection:Disconnect()
-    end
-    
-    -- Remove GUI
-    if self.ScreenGui then
-        self.ScreenGui:Destroy()
-    end
-    
-    -- Remove blur
-    if self.Blur then
-        self.Blur:Destroy()
-    end
+-- Make the library accessible globally if in a supported environment
+if getgenv then
+    getgenv().Celestial = Celestial
 end
 
-return NovaLibrary
+return Celestial
