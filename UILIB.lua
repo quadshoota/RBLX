@@ -1,22 +1,7 @@
---[[
-    Celestial Interface Suite
-    A beautiful, fluent UI library for Roblox experiences.
-    
-    Author: YourName
-    License: MIT
-    GitHub: https://github.com/yourusername/Celestial
---]]
-
--- LOCAL MODULE DEFINITIONS
+-- Create a fresh version of the Celestial library with proper AddTab implementation
 local Celestial = {}
-local Acrylic = {}
-local Creator = {}
-local Components = {}
-local Elements = {}
-local Themes = {Names = {"Dark", "Darker", "Light", "Aqua", "Amethyst", "Rose"}}
-local Flipper = {} -- Animation Engine
 
--- SERVICES
+-- Services
 local LightingService = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 local PlayersService = game:GetService("Players")
@@ -26,1886 +11,12 @@ local WorkspaceCamera = game:GetService("Workspace").CurrentCamera
 local LocalPlayer = PlayersService.LocalPlayer
 local PlayerMouse = LocalPlayer:GetMouse()
 
---//////////////////////////////////////////////////////////////////////////////////--
---                                   FLIPPER ENGINE                                 --
---//////////////////////////////////////////////////////////////////////////////////--
-
--- Animation Engine based on Flipper
-do
-    -- Signal implementation
-    local Signal = {}
-    Signal.__index = Signal
-
-    function Signal.new()
-        return setmetatable({_connections = {}, _threads = {}}, Signal)
-    end
-
-    function Signal:fire(...)
-        for _, connection in pairs(self._connections) do
-            connection._handler(...)
-        end
-        
-        for _, thread in pairs(self._threads) do
-            coroutine.resume(thread, ...)
-        end
-        
-        self._threads = {}
-    end
-
-    function Signal:connect(callback)
-        local connection = {
-            signal = self, 
-            connected = true, 
-            _handler = callback
-        }
-        
-        table.insert(self._connections, connection)
-        
-        function connection:disconnect()
-            if self.connected then
-                self.connected = false
-                for i, conn in pairs(self.signal._connections) do
-                    if conn == self then
-                        table.remove(self.signal._connections, i)
-                        return
-                    end
-                end
-            end
-        end
-        
-        return connection
-    end
-
-    function Signal:wait()
-        table.insert(self._threads, coroutine.running())
-        return coroutine.yield()
-    end
-    
-    -- Base Motor class
-    local BaseMotor = {}
-    BaseMotor.__index = BaseMotor
-
-    function BaseMotor.new()
-        return setmetatable({
-            _onStep = Signal.new(),
-            _onStart = Signal.new(),
-            _onComplete = Signal.new()
-        }, BaseMotor)
-    end
-
-    function BaseMotor:onStep(callback)
-        return self._onStep:connect(callback)
-    end
-
-    function BaseMotor:onStart(callback)
-        return self._onStart:connect(callback)
-    end
-
-    function BaseMotor:onComplete(callback)
-        return self._onComplete:connect(callback)
-    end
-
-    function BaseMotor:start()
-        if not self._connection then
-            self._connection = RunService.RenderStepped:Connect(function(deltaTime)
-                self:step(deltaTime)
-            end)
-        end
-    end
-
-    function BaseMotor:stop()
-        if self._connection then
-            self._connection:Disconnect()
-            self._connection = nil
-        end
-    end
-
-    BaseMotor.destroy = BaseMotor.stop
-    BaseMotor.step = function() end
-    BaseMotor.getValue = function() end
-    BaseMotor.setGoal = function() end
-
-    function BaseMotor:__tostring()
-        return "Motor"
-    end
-
-    -- Single Motor (animates a single value)
-    local SingleMotor = setmetatable({}, BaseMotor)
-    SingleMotor.__index = SingleMotor
-
-    function SingleMotor.new(initialValue, useImplicitConnections)
-        assert(initialValue, "Missing argument #1: initialValue")
-        assert(typeof(initialValue) == "number", "initialValue must be a number!")
-        
-        local self = setmetatable(BaseMotor.new(), SingleMotor)
-        
-        self._useImplicitConnections = useImplicitConnections ~= nil and useImplicitConnections or true
-        self._goal = nil
-        self._state = {complete = true, value = initialValue}
-        
-        return self
-    end
-
-    function SingleMotor:step(deltaTime)
-        if self._state.complete then
-            return true
-        end
-        
-        local newState = self._goal:step(self._state, deltaTime)
-        self._state = newState
-        self._onStep:fire(newState.value)
-        
-        if newState.complete then
-            if self._useImplicitConnections then
-                self:stop()
-            end
-            self._onComplete:fire()
-        end
-        
-        return newState.complete
-    end
-
-    function SingleMotor:getValue()
-        return self._state.value
-    end
-
-    function SingleMotor:setGoal(goal)
-        self._state.complete = false
-        self._goal = goal
-        self._onStart:fire()
-        
-        if self._useImplicitConnections then
-            self:start()
-        end
-    end
-
-    function SingleMotor:__tostring()
-        return "Motor(Single)"
-    end
-
-    -- Group Motor (animates multiple values)
-    local GroupMotor = setmetatable({}, BaseMotor)
-    GroupMotor.__index = GroupMotor
-    
-    -- Motor detection helper
-    local isMotor = function(obj)
-        local objType = tostring(obj):match("^Motor%((.+)%)$")
-        if objType then
-            return true, objType
-        else
-            return false
-        end
-    end
-    
-    -- Motor conversion helper
-    local function createMotor(value)
-        if isMotor(value) then
-            return value
-        end
-        
-        local valueType = typeof(value)
-        if valueType == "number" then
-            return SingleMotor.new(value, false)
-        elseif valueType == "table" then
-            return GroupMotor.new(value, false)
-        end
-        
-        error(("Unable to convert %q to motor; type %s is unsupported"):format(value, valueType), 2)
-    end
-
-    function GroupMotor.new(initialValues, useImplicitConnections)
-        assert(initialValues, "Missing argument #1: initialValues")
-        assert(typeof(initialValues) == "table", "initialValues must be a table!")
-        assert(not initialValues.step, [[initialValues contains disallowed property "step". Did you mean to put a table of values here?]])
-        
-        local self = setmetatable(BaseMotor.new(), GroupMotor)
-        
-        if useImplicitConnections ~= nil then
-            self._useImplicitConnections = useImplicitConnections
-        else
-            self._useImplicitConnections = true
-        end
-        
-        self._complete = true
-        self._motors = {}
-        
-        for key, value in pairs(initialValues) do
-            self._motors[key] = createMotor(value)
-        end
-        
-        return self
-    end
-
-    function GroupMotor:step(deltaTime)
-        if self._complete then
-            return true
-        end
-        
-        local allComplete = true
-        for _, motor in pairs(self._motors) do
-            local complete = motor:step(deltaTime)
-            if not complete then
-                allComplete = false
-            end
-        end
-        
-        self._onStep:fire(self:getValue())
-        
-        if allComplete then
-            if self._useImplicitConnections then
-                self:stop()
-            end
-            self._complete = true
-            self._onComplete:fire()
-        end
-        
-        return allComplete
-    end
-
-    function GroupMotor:setGoal(goals)
-        assert(not goals.step, [[goals contains disallowed property "step". Did you mean to put a table of goals here?]])
-        
-        self._complete = false
-        self._onStart:fire()
-        
-        for key, goal in pairs(goals) do
-            local motor = assert(self._motors[key], ("Unknown motor for key %s"):format(key))
-            motor:setGoal(goal)
-        end
-        
-        if self._useImplicitConnections then
-            self:start()
-        end
-    end
-
-    function GroupMotor:getValue()
-        local values = {}
-        for key, motor in pairs(self._motors) do
-            values[key] = motor:getValue()
-        end
-        return values
-    end
-
-    function GroupMotor:__tostring()
-        return "Motor(Group)"
-    end
-
-    -- Spring goal
-    local Spring = {}
-    Spring.__index = Spring
-
-    function Spring.new(targetValue, options)
-        assert(targetValue, "Missing argument #1: targetValue")
-        options = options or {}
-        
-        return setmetatable({
-            _targetValue = targetValue,
-            _frequency = options.frequency or 4,
-            _dampingRatio = options.dampingRatio or 1
-        }, Spring)
-    end
-
-    function Spring:step(state, deltaTime)
-        -- Adapted spring physics implementation
-        local d = self._dampingRatio
-        local f = self._frequency * 2 * math.pi
-        local g = self._targetValue
-        local p = state.value
-        local v = state.velocity or 0
-        
-        local offset = p - g
-        local decay = math.exp(-d * f * deltaTime)
-        
-        local position, velocity
-        
-        if d == 1 then -- Critically damped
-            position = (offset * (1 + f * deltaTime) + v * deltaTime) * decay + g
-            velocity = (v * (1 - f * deltaTime) - offset * (f * f * deltaTime)) * decay
-        elseif d < 1 then -- Underdamped
-            local c = math.sqrt(1 - d * d)
-            
-            local i = math.cos(f * c * deltaTime)
-            local j = math.sin(f * c * deltaTime)
-            
-            if c > 0.0001 then
-                j = j / c
-            else
-                j = deltaTime * f
-            end
-            
-            position = (offset * i + v * j) * decay + g
-            velocity = (v * i - offset * j * f) * decay
-        else -- Overdamped
-            local c = math.sqrt(d * d - 1)
-            
-            local r1 = -f * (d - c)
-            local r2 = -f * (d + c)
-            
-            local co2 = (v - offset * r1) / (2 * f * c)
-            local co1 = offset - co2
-            
-            local e1 = co1 * math.exp(r1 * deltaTime)
-            local e2 = co2 * math.exp(r2 * deltaTime)
-            
-            position = e1 + e2 + g
-            velocity = e1 * r1 + e2 * r2
-        end
-        
-        local complete = math.abs(velocity) < 0.001 and math.abs(position - g) < 0.001
-        
-        return {
-            complete = complete,
-            value = complete and g or position,
-            velocity = velocity
-        }
-    end
-
-    -- Instant goal (jumps to target immediately)
-    local Instant = {}
-    Instant.__index = Instant
-
-    function Instant.new(targetValue)
-        return setmetatable({_targetValue = targetValue}, Instant)
-    end
-
-    function Instant:step()
-        return {
-            complete = true,
-            value = self._targetValue
-        }
-    end
-
-    -- Linear goal (moves at constant velocity)
-    local Linear = {}
-    Linear.__index = Linear
-
-    function Linear.new(targetValue, options)
-        assert(targetValue, "Missing argument #1: targetValue")
-        options = options or {}
-        
-        return setmetatable({
-            _targetValue = targetValue,
-            _velocity = options.velocity or 1
-        }, Linear)
-    end
-
-    function Linear:step(state, deltaTime)
-        local currentValue = state.value
-        local velocity = self._velocity
-        local deltaValue = deltaTime * velocity
-        local targetValue = self._targetValue
-        
-        local reachedTarget = deltaValue >= math.abs(targetValue - currentValue)
-        
-        currentValue = currentValue + deltaValue * (targetValue > currentValue and 1 or -1)
-        
-        if reachedTarget then
-            currentValue = self._targetValue
-            velocity = 0
-        end
-        
-        return {
-            complete = reachedTarget,
-            value = currentValue,
-            velocity = velocity
-        }
-    end
-
-    -- Export the Flipper library
-    Flipper = {
-        SingleMotor = SingleMotor,
-        GroupMotor = GroupMotor,
-        Spring = Spring,
-        Instant = Instant,
-        Linear = Linear,
-        isMotor = isMotor
-    }
-end
-
---//////////////////////////////////////////////////////////////////////////////////--
---                                   CREATOR MODULE                                 --
---//////////////////////////////////////////////////////////////////////////////////--
-
-do
-    -- Registry for themed objects
-    Creator.Registry = {}
-    
-    -- Signal connections for cleanup
-    Creator.Signals = {}
-    
-    -- Motors for transparency animations
-    Creator.TransparencyMotors = {}
-    
-    -- Default properties for common Instance types
-    Creator.DefaultProperties = {
-        ScreenGui = {
-            ResetOnSpawn = false,
-            ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        },
-        Frame = {
-            BackgroundColor3 = Color3.new(1, 1, 1),
-            BorderColor3 = Color3.new(0, 0, 0),
-            BorderSizePixel = 0
-        },
-        ScrollingFrame = {
-            BackgroundColor3 = Color3.new(1, 1, 1),
-            BorderColor3 = Color3.new(0, 0, 0),
-            ScrollBarImageColor3 = Color3.new(0, 0, 0)
-        },
-        TextLabel = {
-            BackgroundColor3 = Color3.new(1, 1, 1),
-            BorderColor3 = Color3.new(0, 0, 0),
-            Font = Enum.Font.SourceSans,
-            Text = "",
-            TextColor3 = Color3.new(0, 0, 0),
-            BackgroundTransparency = 1,
-            TextSize = 14
-        },
-        TextButton = {
-            BackgroundColor3 = Color3.new(1, 1, 1),
-            BorderColor3 = Color3.new(0, 0, 0),
-            AutoButtonColor = false,
-            Font = Enum.Font.SourceSans,
-            Text = "",
-            TextColor3 = Color3.new(0, 0, 0),
-            TextSize = 14
-        },
-        TextBox = {
-            BackgroundColor3 = Color3.new(1, 1, 1),
-            BorderColor3 = Color3.new(0, 0, 0),
-            ClearTextOnFocus = false,
-            Font = Enum.Font.SourceSans,
-            Text = "",
-            TextColor3 = Color3.new(0, 0, 0),
-            TextSize = 14
-        },
-        ImageLabel = {
-            BackgroundTransparency = 1,
-            BackgroundColor3 = Color3.new(1, 1, 1),
-            BorderColor3 = Color3.new(0, 0, 0),
-            BorderSizePixel = 0
-        },
-        ImageButton = {
-            BackgroundColor3 = Color3.new(1, 1, 1),
-            BorderColor3 = Color3.new(0, 0, 0),
-            AutoButtonColor = false
-        },
-        CanvasGroup = {
-            BackgroundColor3 = Color3.new(1, 1, 1),
-            BorderColor3 = Color3.new(0, 0, 0),
-            BorderSizePixel = 0
-        }
-    }
-
-    -- Apply theme properties to an object
-    local function applyThemeProperties(object, properties)
-        if properties.ThemeTag then
-            Creator.AddThemeObject(object, properties.ThemeTag)
-        end
-    end
-
-    -- Add a signal connection to the registry for cleanup
-    function Creator.AddSignal(signal, callback)
-        table.insert(Creator.Signals, signal:Connect(callback))
-    end
-
-    -- Disconnect all registered signals
-    function Creator.Disconnect()
-        for i = #Creator.Signals, 1, -1 do
-            local signal = table.remove(Creator.Signals, i)
-            signal:Disconnect()
-        end
-    end
-
-    -- Get a theme property value
-    function Creator.GetThemeProperty(property)
-        if Themes[Celestial.Theme][property] then
-            return Themes[Celestial.Theme][property]
-        end
-        return Themes.Dark[property]
-    end
-
-    -- Update all themed objects
-    function Creator.UpdateTheme()
-        for object, data in next, Creator.Registry do
-            for property, value in next, data.Properties do
-                object[property] = Creator.GetThemeProperty(value)
-            end
-        end
-        
-        for _, motor in next, Creator.TransparencyMotors do
-            motor:setGoal(Flipper.Instant.new(Creator.GetThemeProperty("ElementTransparency")))
-        end
-    end
-
-    -- Register an object to be themed
-    function Creator.AddThemeObject(object, properties)
-        local index = #Creator.Registry + 1
-        local data = {
-            Object = object,
-            Properties = properties,
-            Idx = index
-        }
-        
-        Creator.Registry[object] = data
-        Creator.UpdateTheme()
-        return object
-    end
-
-    -- Override theme properties on an object
-    function Creator.OverrideTag(object, properties)
-        Creator.Registry[object].Properties = properties
-        Creator.UpdateTheme()
-    end
-
-    -- Create a new Instance with properties and children
-    function Creator.New(className, properties, children)
-        local instance = Instance.new(className)
-        
-        -- Apply default properties for the class
-        for property, value in next, Creator.DefaultProperties[className] or {} do
-            instance[property] = value
-        end
-        
-        -- Apply custom properties
-        for property, value in next, properties or {} do
-            if property ~= "ThemeTag" then
-                instance[property] = value
-            end
-        end
-        
-        -- Add children
-        for _, child in next, children or {} do
-            child.Parent = instance
-        end
-        
-        applyThemeProperties(instance, properties or {})
-        return instance
-    end
-
-    -- Create a spring-driven animation motor for properties
-    function Creator.SpringMotor(initialValue, object, property, skipThemeUpdates, isTransparency)
-        skipThemeUpdates = skipThemeUpdates or false
-        isTransparency = isTransparency or false
-        
-        local motor = Flipper.SingleMotor.new(initialValue)
-        
-        motor:onStep(function(value)
-            object[property] = value
-        end)
-        
-        if isTransparency then
-            table.insert(Creator.TransparencyMotors, motor)
-        end
-        
-        local setGoal = function(goal, ignoreCheck)
-            ignoreCheck = ignoreCheck or false
-            
-            if not skipThemeUpdates then
-                if not ignoreCheck then
-                    if property == "BackgroundTransparency" and Celestial.DialogOpen then
-                        return
-                    end
-                end
-            end
-            
-            motor:setGoal(Flipper.Spring.new(goal, {frequency = 8}))
-        end
-        
-        return motor, setGoal
-    end
-end
-
---//////////////////////////////////////////////////////////////////////////////////--
---                                  ACRYLIC MODULE                                  --
---//////////////////////////////////////////////////////////////////////////////////--
-
-do
-    -- Utility functions
-    local function mapRange(value, min1, max1, min2, max2)
-        return (value - min1) * (max2 - min2) / (max1 - min1) + min2
-    end
-
-    local function screenToWorldPoint(screenPoint, depth)
-        local ray = WorkspaceCamera:ScreenPointToRay(screenPoint.X, screenPoint.Y)
-        return ray.Origin + ray.Direction * depth
-    end
-
-    local function getEffectPadding()
-        local screenHeight = WorkspaceCamera.ViewportSize.Y
-        return mapRange(screenHeight, 0, 2560, 8, 56)
-    end
-
-    local Utils = {
-        screenToWorldPoint = screenToWorldPoint,
-        getEffectPadding = getEffectPadding
-    }
-
-    -- CreateAcrylic - Create a physical part for acrylic effect
-    local CreateAcrylic = function()
-        local part = Creator.New("Part", {
-            Name = "Body",
-            Color = Color3.new(0, 0, 0),
-            Material = Enum.Material.Glass,
-            Size = Vector3.new(1, 1, 0),
-            Anchored = true,
-            CanCollide = false,
-            Locked = true,
-            CastShadow = false,
-            Transparency = 0.98
-        }, {
-            Creator.New("SpecialMesh", {
-                MeshType = Enum.MeshType.Brick,
-                Offset = Vector3.new(0, 0, -1E-6)
-            })
-        })
-        
-        return part
-    end
-
-    -- AcrylicBlur - Create blur effect for acrylic surfaces
-    local AcrylicBlur = function(offset)
-        local interface = {}
-        offset = offset or 0.001
-        
-        local vectors = {
-            topLeft = Vector2.new(),
-            topRight = Vector2.new(), 
-            bottomRight = Vector2.new()
-        }
-        
-        local model = CreateAcrylic()
-        model.Parent = workspace
-        
-        -- Update position vectors for the acrylic surface
-        local function updatePositionVectors(size, position)
-            vectors.topLeft = position
-            vectors.topRight = position + Vector2.new(size.X, 0)
-            vectors.bottomRight = position + size
-        end
-        
-        -- Update the model based on current camera and vectors
-        local function updateModel()
-            local camera = WorkspaceCamera
-            local cameraTransform = camera and camera.CFrame or CFrame.new()
-            
-            local v1, v2, v3 = Utils.screenToWorldPoint(vectors.topLeft, offset),
-                              Utils.screenToWorldPoint(vectors.topRight, offset),
-                              Utils.screenToWorldPoint(vectors.bottomRight, offset)
-                              
-            local width, height = (v2 - v1).Magnitude, (v2 - v3).Magnitude
-            
-            model.CFrame = CFrame.fromMatrix((v1 + v3)/2, cameraTransform.XVector, cameraTransform.YVector, cameraTransform.ZVector)
-            model.Mesh.Scale = Vector3.new(width, height, 0)
-        end
-        
-        -- Setup update triggers based on UI element
-        local function setupForElement(element)
-            local padding = Utils.getEffectPadding()
-            local size, pos = element.AbsoluteSize - Vector2.new(padding, padding), 
-                             element.AbsolutePosition + Vector2.new(padding/2, padding/2)
-            
-            updatePositionVectors(size, pos)
-            task.spawn(updateModel)
-        end
-        
-        -- Connect camera property changes to update the effect
-        local connections = {}
-        local function connectCamera()
-            local camera = WorkspaceCamera
-            if not camera then return end
-            
-            table.insert(connections, camera:GetPropertyChangedSignal("CFrame"):Connect(updateModel))
-            table.insert(connections, camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateModel))
-            table.insert(connections, camera:GetPropertyChangedSignal("FieldOfView"):Connect(updateModel))
-            
-            task.spawn(updateModel)
-        end
-        
-        -- Clean up connections when model is destroyed
-        model.Destroying:Connect(function()
-            for _, connection in connections do
-                pcall(function() connection:Disconnect() end)
-            end
-        end)
-        
-        connectCamera()
-        
-        return setupForElement, model
-    end
-
-    -- AcrylicPaint - Create the visual frame for acrylic effects
-    local AcrylicPaint = function()
-        local interface = {}
-        
-        -- Create the visual frame for the acrylic paint effect
-        interface.Frame = Creator.New("Frame", {
-            Size = UDim2.fromScale(1, 1),
-            BackgroundTransparency = 0.9,
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BorderSizePixel = 0
-        }, {
-            -- Noise texture
-            Creator.New("ImageLabel", {
-                Image = "rbxassetid://8992230677",
-                ScaleType = "Slice",
-                SliceCenter = Rect.new(Vector2.new(99, 99), Vector2.new(99, 99)),
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                Size = UDim2.new(1, 120, 1, 116),
-                Position = UDim2.new(0.5, 0, 0.5, 0),
-                BackgroundTransparency = 1,
-                ImageColor3 = Color3.fromRGB(0, 0, 0),
-                ImageTransparency = 0.7
-            }),
-            
-            -- Corner rounding
-            Creator.New("UICorner", {
-                CornerRadius = UDim.new(0, 8)
-            }),
-            
-            -- Background layer
-            Creator.New("Frame", {
-                BackgroundTransparency = 0.45,
-                Size = UDim2.fromScale(1, 1),
-                Name = "Background",
-                ThemeTag = {BackgroundColor3 = "AcrylicMain"}
-            }, {
-                Creator.New("UICorner", {
-                    CornerRadius = UDim.new(0, 8)
-                })
-            }),
-            
-            -- Gradient overlay
-            Creator.New("Frame", {
-                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                BackgroundTransparency = 0.4,
-                Size = UDim2.fromScale(1, 1)
-            }, {
-                Creator.New("UICorner", {
-                    CornerRadius = UDim.new(0, 8)
-                }),
-                Creator.New("UIGradient", {
-                    Rotation = 90,
-                    ThemeTag = {Color = "AcrylicGradient"}
-                })
-            }),
-            
-            -- Noise texture layers
-            Creator.New("ImageLabel", {
-                Image = "rbxassetid://9968344105",
-                ImageTransparency = 0.98,
-                ScaleType = Enum.ScaleType.Tile,
-                TileSize = UDim2.new(0, 128, 0, 128),
-                Size = UDim2.fromScale(1, 1),
-                BackgroundTransparency = 1
-            }, {
-                Creator.New("UICorner", {
-                    CornerRadius = UDim.new(0, 8)
-                })
-            }),
-            
-            Creator.New("ImageLabel", {
-                Image = "rbxassetid://9968344227",
-                ImageTransparency = 0.9,
-                ScaleType = Enum.ScaleType.Tile,
-                TileSize = UDim2.new(0, 128, 0, 128),
-                Size = UDim2.fromScale(1, 1),
-                BackgroundTransparency = 1,
-                ThemeTag = {ImageTransparency = "AcrylicNoise"}
-            }, {
-                Creator.New("UICorner", {
-                    CornerRadius = UDim.new(0, 8)
-                })
-            }),
-            
-            -- Border
-            Creator.New("Frame", {
-                BackgroundTransparency = 1,
-                Size = UDim2.fromScale(1, 1),
-                ZIndex = 2
-            }, {
-                Creator.New("UICorner", {
-                    CornerRadius = UDim.new(0, 8)
-                }),
-                Creator.New("UIStroke", {
-                    Transparency = 0.5,
-                    Thickness = 1,
-                    ThemeTag = {Color = "AcrylicBorder"}
-                })
-            })
-        })
-        
-        -- Add blur effect if acrylic is enabled
-        local effectInstance
-        if Celestial.UseAcrylic then
-            local setupBlur, model = AcrylicBlur()
-            effectInstance = {
-                Frame = Creator.New("Frame", {
-                    BackgroundTransparency = 1,
-                    Size = UDim2.fromScale(1, 1)
-                }),
-                Model = model
-            }
-            
-            -- Connect position and size changes to update blur
-            Creator.AddSignal(effectInstance.Frame:GetPropertyChangedSignal("AbsolutePosition"), function()
-                setupBlur(effectInstance.Frame)
-            end)
-            
-            Creator.AddSignal(effectInstance.Frame:GetPropertyChangedSignal("AbsoluteSize"), function()
-                setupBlur(effectInstance.Frame)
-            end)
-            
-            -- Add parent element to update visibility based on parent
-            effectInstance.AddParent = function(parent)
-                Creator.AddSignal(parent:GetPropertyChangedSignal("Visible"), function()
-                    effectInstance.SetVisibility(parent.Visible)
-                end)
-            end
-            
-            -- Set visibility of the acrylic effect
-            effectInstance.SetVisibility = function(visible)
-                model.Transparency = visible and 0.98 or 1
-            end
-            
-            effectInstance.Frame.Parent = interface.Frame
-            interface.Model = effectInstance.Model
-            interface.AddParent = effectInstance.AddParent
-            interface.SetVisibility = effectInstance.SetVisibility
-        end
-        
-        return interface
-    end
-
-    -- Initialize acrylic effects
-    function Acrylic.init()
-        local depthEffect = Instance.new("DepthOfFieldEffect")
-        depthEffect.FarIntensity = 0
-        depthEffect.InFocusRadius = 0.1
-        depthEffect.NearIntensity = 1
-        
-        local savedEffects = {}
-        
-        -- Enable acrylic effect by disabling other depth effects
-        function Acrylic.Enable()
-            for _, effect in pairs(savedEffects) do
-                effect.Enabled = false
-            end
-            depthEffect.Parent = LightingService
-        end
-        
-        -- Disable acrylic effect and restore original depth effects
-        function Acrylic.Disable()
-            for _, effect in pairs(savedEffects) do
-                effect.Enabled = effect.enabled
-            end
-            depthEffect.Parent = nil
-        end
-        
-        -- Save state of existing depth effects
-        local function saveExistingEffects()
-            local function checkEffect(effect)
-                if effect:IsA("DepthOfFieldEffect") then
-                    savedEffects[effect] = {enabled = effect.Enabled}
-                end
-            end
-            
-            for _, child in pairs(LightingService:GetChildren()) do
-                checkEffect(child)
-            end
-            
-            if WorkspaceCamera then
-                for _, child in pairs(WorkspaceCamera:GetChildren()) do
-                    checkEffect(child)
-                end
-            end
-        end
-        
-        saveExistingEffects()
-        Acrylic.Enable()
-    end
-
-    -- Export Acrylic components
-    Acrylic.AcrylicBlur = AcrylicBlur
-    Acrylic.CreateAcrylic = CreateAcrylic
-    Acrylic.AcrylicPaint = AcrylicPaint
-end
-
---//////////////////////////////////////////////////////////////////////////////////--
---                                 THEMES DEFINITIONS                               --
---//////////////////////////////////////////////////////////////////////////////////--
-
-do
-    -- Dark Theme
-    Themes.Dark = {
-        Name = "Dark",
-        Accent = Color3.fromRGB(96, 205, 255),
-        AcrylicMain = Color3.fromRGB(60, 60, 60),
-        AcrylicBorder = Color3.fromRGB(90, 90, 90),
-        AcrylicGradient = ColorSequence.new(Color3.fromRGB(40, 40, 40), Color3.fromRGB(40, 40, 40)),
-        AcrylicNoise = 0.9,
-        TitleBarLine = Color3.fromRGB(75, 75, 75),
-        Tab = Color3.fromRGB(120, 120, 120),
-        Element = Color3.fromRGB(120, 120, 120),
-        ElementBorder = Color3.fromRGB(35, 35, 35),
-        InElementBorder = Color3.fromRGB(90, 90, 90),
-        ElementTransparency = 0.87,
-        ToggleSlider = Color3.fromRGB(120, 120, 120),
-        ToggleToggled = Color3.fromRGB(0, 0, 0),
-        SliderRail = Color3.fromRGB(120, 120, 120),
-        DropdownFrame = Color3.fromRGB(160, 160, 160),
-        DropdownHolder = Color3.fromRGB(45, 45, 45),
-        DropdownBorder = Color3.fromRGB(35, 35, 35),
-        DropdownOption = Color3.fromRGB(120, 120, 120),
-        Keybind = Color3.fromRGB(120, 120, 120),
-        Input = Color3.fromRGB(160, 160, 160),
-        InputFocused = Color3.fromRGB(10, 10, 10),
-        InputIndicator = Color3.fromRGB(150, 150, 150),
-        Dialog = Color3.fromRGB(45, 45, 45),
-        DialogHolder = Color3.fromRGB(35, 35, 35),
-        DialogHolderLine = Color3.fromRGB(30, 30, 30),
-        DialogButton = Color3.fromRGB(45, 45, 45),
-        DialogButtonBorder = Color3.fromRGB(80, 80, 80),
-        DialogBorder = Color3.fromRGB(70, 70, 70),
-        DialogInput = Color3.fromRGB(55, 55, 55),
-        DialogInputLine = Color3.fromRGB(160, 160, 160),
-        Text = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(170, 170, 170),
-        Hover = Color3.fromRGB(120, 120, 120),
-        HoverChange = 0.07
-    }
-
-    -- Darker Theme
-    Themes.Darker = {
-        Name = "Darker",
-        Accent = Color3.fromRGB(72, 138, 182),
-        AcrylicMain = Color3.fromRGB(30, 30, 30),
-        AcrylicBorder = Color3.fromRGB(60, 60, 60),
-        AcrylicGradient = ColorSequence.new(Color3.fromRGB(25, 25, 25), Color3.fromRGB(15, 15, 15)),
-        AcrylicNoise = 0.94,
-        TitleBarLine = Color3.fromRGB(65, 65, 65),
-        Tab = Color3.fromRGB(100, 100, 100),
-        Element = Color3.fromRGB(70, 70, 70),
-        ElementBorder = Color3.fromRGB(25, 25, 25),
-        InElementBorder = Color3.fromRGB(55, 55, 55),
-        ElementTransparency = 0.82,
-        DropdownFrame = Color3.fromRGB(120, 120, 120),
-        DropdownHolder = Color3.fromRGB(35, 35, 35),
-        DropdownBorder = Color3.fromRGB(25, 25, 25),
-        Dialog = Color3.fromRGB(35, 35, 35),
-        DialogHolder = Color3.fromRGB(25, 25, 25),
-        DialogHolderLine = Color3.fromRGB(20, 20, 20),
-        DialogButton = Color3.fromRGB(35, 35, 35),
-        DialogButtonBorder = Color3.fromRGB(55, 55, 55),
-        DialogBorder = Color3.fromRGB(50, 50, 50),
-        DialogInput = Color3.fromRGB(45, 45, 45),
-        DialogInputLine = Color3.fromRGB(120, 120, 120),
-        Text = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(170, 170, 170),
-        Hover = Color3.fromRGB(70, 70, 70),
-        HoverChange = 0.07
-    }
-
-    -- Light Theme
-    Themes.Light = {
-        Name = "Light",
-        Accent = Color3.fromRGB(0, 103, 192),
-        AcrylicMain = Color3.fromRGB(200, 200, 200),
-        AcrylicBorder = Color3.fromRGB(120, 120, 120),
-        AcrylicGradient = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 255, 255)),
-        AcrylicNoise = 0.96,
-        TitleBarLine = Color3.fromRGB(160, 160, 160),
-        Tab = Color3.fromRGB(90, 90, 90),
-        Element = Color3.fromRGB(255, 255, 255),
-        ElementBorder = Color3.fromRGB(180, 180, 180),
-        InElementBorder = Color3.fromRGB(150, 150, 150),
-        ElementTransparency = 0.65,
-        ToggleSlider = Color3.fromRGB(40, 40, 40),
-        ToggleToggled = Color3.fromRGB(255, 255, 255),
-        SliderRail = Color3.fromRGB(40, 40, 40),
-        DropdownFrame = Color3.fromRGB(200, 200, 200),
-        DropdownHolder = Color3.fromRGB(240, 240, 240),
-        DropdownBorder = Color3.fromRGB(200, 200, 200),
-        DropdownOption = Color3.fromRGB(150, 150, 150),
-        Keybind = Color3.fromRGB(120, 120, 120),
-        Input = Color3.fromRGB(200, 200, 200),
-        InputFocused = Color3.fromRGB(100, 100, 100),
-        InputIndicator = Color3.fromRGB(80, 80, 80),
-        Dialog = Color3.fromRGB(255, 255, 255),
-        DialogHolder = Color3.fromRGB(240, 240, 240),
-        DialogHolderLine = Color3.fromRGB(228, 228, 228),
-        DialogButton = Color3.fromRGB(255, 255, 255),
-        DialogButtonBorder = Color3.fromRGB(190, 190, 190),
-        DialogBorder = Color3.fromRGB(140, 140, 140),
-        DialogInput = Color3.fromRGB(250, 250, 250),
-        DialogInputLine = Color3.fromRGB(160, 160, 160),
-        Text = Color3.fromRGB(0, 0, 0),
-        SubText = Color3.fromRGB(40, 40, 40),
-        Hover = Color3.fromRGB(50, 50, 50),
-        HoverChange = 0.16
-    }
-
-    -- Aqua Theme
-    Themes.Aqua = {
-        Name = "Aqua",
-        Accent = Color3.fromRGB(60, 165, 165),
-        AcrylicMain = Color3.fromRGB(20, 20, 20),
-        AcrylicBorder = Color3.fromRGB(50, 100, 100),
-        AcrylicGradient = ColorSequence.new(Color3.fromRGB(60, 140, 140), Color3.fromRGB(40, 80, 80)),
-        AcrylicNoise = 0.92,
-        TitleBarLine = Color3.fromRGB(60, 120, 120),
-        Tab = Color3.fromRGB(140, 180, 180),
-        Element = Color3.fromRGB(110, 160, 160),
-        ElementBorder = Color3.fromRGB(40, 70, 70),
-        InElementBorder = Color3.fromRGB(80, 110, 110),
-        ElementTransparency = 0.84,
-        ToggleSlider = Color3.fromRGB(110, 160, 160),
-        ToggleToggled = Color3.fromRGB(0, 0, 0),
-        SliderRail = Color3.fromRGB(110, 160, 160),
-        DropdownFrame = Color3.fromRGB(160, 200, 200),
-        DropdownHolder = Color3.fromRGB(40, 80, 80),
-        DropdownBorder = Color3.fromRGB(40, 65, 65),
-        DropdownOption = Color3.fromRGB(110, 160, 160),
-        Keybind = Color3.fromRGB(110, 160, 160),
-        Input = Color3.fromRGB(110, 160, 160),
-        InputFocused = Color3.fromRGB(20, 10, 30),
-        InputIndicator = Color3.fromRGB(130, 170, 170),
-        Dialog = Color3.fromRGB(40, 80, 80),
-        DialogHolder = Color3.fromRGB(30, 60, 60),
-        DialogHolderLine = Color3.fromRGB(25, 50, 50),
-        DialogButton = Color3.fromRGB(40, 80, 80),
-        DialogButtonBorder = Color3.fromRGB(80, 110, 110),
-        DialogBorder = Color3.fromRGB(50, 100, 100),
-        DialogInput = Color3.fromRGB(45, 90, 90),
-        DialogInputLine = Color3.fromRGB(130, 170, 170),
-        Text = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(170, 170, 170),
-        Hover = Color3.fromRGB(110, 160, 160),
-        HoverChange = 0.04
-    }
-
-    -- Amethyst Theme
-    Themes.Amethyst = {
-        Name = "Amethyst",
-        Accent = Color3.fromRGB(97, 62, 167),
-        AcrylicMain = Color3.fromRGB(20, 20, 20),
-        AcrylicBorder = Color3.fromRGB(110, 90, 130),
-        AcrylicGradient = ColorSequence.new(Color3.fromRGB(85, 57, 139), Color3.fromRGB(40, 25, 65)),
-        AcrylicNoise = 0.92,
-        TitleBarLine = Color3.fromRGB(95, 75, 110),
-        Tab = Color3.fromRGB(160, 140, 180),
-        Element = Color3.fromRGB(140, 120, 160),
-        ElementBorder = Color3.fromRGB(60, 50, 70),
-        InElementBorder = Color3.fromRGB(100, 90, 110),
-        ElementTransparency = 0.87,
-        ToggleSlider = Color3.fromRGB(140, 120, 160),
-        ToggleToggled = Color3.fromRGB(0, 0, 0),
-        SliderRail = Color3.fromRGB(140, 120, 160),
-        DropdownFrame = Color3.fromRGB(170, 160, 200),
-        DropdownHolder = Color3.fromRGB(60, 45, 80),
-        DropdownBorder = Color3.fromRGB(50, 40, 65),
-        DropdownOption = Color3.fromRGB(140, 120, 160),
-        Keybind = Color3.fromRGB(140, 120, 160),
-        Input = Color3.fromRGB(140, 120, 160),
-        InputFocused = Color3.fromRGB(20, 10, 30),
-        InputIndicator = Color3.fromRGB(170, 150, 190),
-        Dialog = Color3.fromRGB(60, 45, 80),
-        DialogHolder = Color3.fromRGB(45, 30, 65),
-        DialogHolderLine = Color3.fromRGB(40, 25, 60),
-        DialogButton = Color3.fromRGB(60, 45, 80),
-        DialogButtonBorder = Color3.fromRGB(95, 80, 110),
-        DialogBorder = Color3.fromRGB(85, 70, 100),
-        DialogInput = Color3.fromRGB(70, 55, 85),
-        DialogInputLine = Color3.fromRGB(175, 160, 190),
-        Text = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(170, 170, 170),
-        Hover = Color3.fromRGB(140, 120, 160),
-        HoverChange = 0.04
-    }
-
-    -- Rose Theme
-    Themes.Rose = {
-        Name = "Rose",
-        Accent = Color3.fromRGB(180, 55, 90),
-        AcrylicMain = Color3.fromRGB(40, 40, 40),
-        AcrylicBorder = Color3.fromRGB(130, 90, 110),
-        AcrylicGradient = ColorSequence.new(Color3.fromRGB(190, 60, 135), Color3.fromRGB(165, 50, 70)),
-        AcrylicNoise = 0.92,
-        TitleBarLine = Color3.fromRGB(140, 85, 105),
-        Tab = Color3.fromRGB(180, 140, 160),
-        Element = Color3.fromRGB(200, 120, 170),
-        ElementBorder = Color3.fromRGB(110, 70, 85),
-        InElementBorder = Color3.fromRGB(120, 90, 90),
-        ElementTransparency = 0.86,
-        ToggleSlider = Color3.fromRGB(200, 120, 170),
-        ToggleToggled = Color3.fromRGB(0, 0, 0),
-        SliderRail = Color3.fromRGB(200, 120, 170),
-        DropdownFrame = Color3.fromRGB(200, 160, 180),
-        DropdownHolder = Color3.fromRGB(120, 50, 75),
-        DropdownBorder = Color3.fromRGB(90, 40, 55),
-        DropdownOption = Color3.fromRGB(200, 120, 170),
-        Keybind = Color3.fromRGB(200, 120, 170),
-        Input = Color3.fromRGB(200, 120, 170),
-        InputFocused = Color3.fromRGB(20, 10, 30),
-        InputIndicator = Color3.fromRGB(170, 150, 190),
-        Dialog = Color3.fromRGB(120, 50, 75),
-        DialogHolder = Color3.fromRGB(95, 40, 60),
-        DialogHolderLine = Color3.fromRGB(90, 35, 55),
-        DialogButton = Color3.fromRGB(120, 50, 75),
-        DialogButtonBorder = Color3.fromRGB(155, 90, 115),
-        DialogBorder = Color3.fromRGB(100, 70, 90),
-        DialogInput = Color3.fromRGB(135, 55, 80),
-        DialogInputLine = Color3.fromRGB(190, 160, 180),
-        Text = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(170, 170, 170),
-        Hover = Color3.fromRGB(200, 120, 170),
-        HoverChange = 0.04
-    }
-end
-
---//////////////////////////////////////////////////////////////////////////////////--
---                                   COMPONENTS                                     --
---//////////////////////////////////////////////////////////////////////////////////--
-
-do
-    -- Element Component (Base for UI elements)
-    Components.Element = function(title, description, container, isInteractable)
-        local interface = {}
-        
-        -- Title label
-        interface.TitleLabel = Creator.New("TextLabel", {
-            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium, Enum.FontStyle.Normal),
-            Text = title,
-            TextColor3 = Color3.fromRGB(240, 240, 240),
-            TextSize = 13,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Size = UDim2.new(1, 0, 0, 14),
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = 1,
-            ThemeTag = {TextColor3 = "Text"}
-        })
-        
-        -- Description label
-        interface.DescLabel = Creator.New("TextLabel", {
-            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-            Text = description,
-            TextColor3 = Color3.fromRGB(200, 200, 200),
-            TextSize = 12,
-            TextWrapped = true,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            AutomaticSize = Enum.AutomaticSize.Y,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 14),
-            ThemeTag = {TextColor3 = "SubText"}
-        })
-        
-        -- Label container
-        interface.LabelHolder = Creator.New("Frame", {
-            AutomaticSize = Enum.AutomaticSize.Y,
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(10, 0),
-            Size = UDim2.new(1, -28, 0, 0)
-        }, {
-            Creator.New("UIListLayout", {
-                SortOrder = Enum.SortOrder.LayoutOrder,
-                VerticalAlignment = Enum.VerticalAlignment.Center
-            }),
-            Creator.New("UIPadding", {
-                PaddingBottom = UDim.new(0, 13),
-                PaddingTop = UDim.new(0, 13)
-            }),
-            interface.TitleLabel,
-            interface.DescLabel
-        })
-        
-        -- Border
-        interface.Border = Creator.New("UIStroke", {
-            Transparency = 0.5,
-            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-            Color = Color3.fromRGB(0, 0, 0),
-            ThemeTag = {Color = "ElementBorder"}
-        })
-        
-        -- Main element frame
-        interface.Frame = Creator.New("TextButton", {
-            Size = UDim2.new(1, 0, 0, 0),
-            BackgroundTransparency = 0.89,
-            BackgroundColor3 = Color3.fromRGB(130, 130, 130),
-            Parent = container,
-            AutomaticSize = Enum.AutomaticSize.Y,
-            Text = "",
-            LayoutOrder = 7,
-            ThemeTag = {
-                BackgroundColor3 = "Element",
-                BackgroundTransparency = "ElementTransparency"
-            }
-        }, {
-            Creator.New("UICorner", {
-                CornerRadius = UDim.new(0, 4)
-            }),
-            interface.Border,
-            interface.LabelHolder
-        })
-        
-        -- Set title text
-        function interface.SetTitle(_, text)
-            interface.TitleLabel.Text = text
-        end
-        
-        -- Set description text
-        function interface.SetDesc(_, text)
-            if text == nil then
-                text = ""
-            end
-            
-            if text == "" then
-                interface.DescLabel.Visible = false
-            else
-                interface.DescLabel.Visible = true
-            end
-            
-            interface.DescLabel.Text = text
-        end
-        
-        -- Destroy element
-        function interface.Destroy(_)
-            interface.Frame:Destroy()
-        end
-        
-        -- Initialize with provided title and description
-        interface:SetTitle(title)
-        interface:SetDesc(description)
-        
-        -- Add hover effects for interactive elements
-        if isInteractable then
-            local _, setTransparency = Creator.SpringMotor(
-                Creator.GetThemeProperty("ElementTransparency"),
-                interface.Frame,
-                "BackgroundTransparency",
-                false,
-                true
-            )
-            
-            Creator.AddSignal(interface.Frame.MouseEnter, function()
-                setTransparency(Creator.GetThemeProperty("ElementTransparency") - Creator.GetThemeProperty("HoverChange"))
-            end)
-            
-            Creator.AddSignal(interface.Frame.MouseLeave, function()
-                setTransparency(Creator.GetThemeProperty("ElementTransparency"))
-            end)
-            
-            Creator.AddSignal(interface.Frame.MouseButton1Down, function()
-                setTransparency(Creator.GetThemeProperty("ElementTransparency") + Creator.GetThemeProperty("HoverChange"))
-            end)
-            
-            Creator.AddSignal(interface.Frame.MouseButton1Up, function()
-                setTransparency(Creator.GetThemeProperty("ElementTransparency") - Creator.GetThemeProperty("HoverChange"))
-            end)
-        end
-        
-        return interface
-    end
-
-    -- Button Component
-    Components.Button = function(title, container, isCompact)
-        isCompact = isCompact or false
-        
-        local interface = {}
-        
-        -- Button title label
-        interface.Title = Creator.New("TextLabel", {
-            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-            TextColor3 = Color3.fromRGB(200, 200, 200),
-            TextSize = 14,
-            TextWrapped = true,
-            TextXAlignment = Enum.TextXAlignment.Center,
-            TextYAlignment = Enum.TextYAlignment.Center,
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            AutomaticSize = Enum.AutomaticSize.Y,
-            BackgroundTransparency = 1,
-            Size = UDim2.fromScale(1, 1),
-            ThemeTag = {TextColor3 = "Text"}
-        })
-        
-        -- Hover effect frame
-        interface.HoverFrame = Creator.New("Frame", {
-            Size = UDim2.fromScale(1, 1),
-            BackgroundTransparency = 1,
-            ThemeTag = {BackgroundColor3 = "Hover"}
-        }, {
-            Creator.New("UICorner", {
-                CornerRadius = UDim.new(0, 4)
-            })
-        })
-        
-        -- Main button frame
-        interface.Frame = Creator.New("TextButton", {
-            Size = UDim2.new(0, 0, 0, 32),
-            Parent = container,
-            ThemeTag = {BackgroundColor3 = "DialogButton"}
-        }, {
-            Creator.New("UICorner", {
-                CornerRadius = UDim.new(0, 4)
-            }),
-            Creator.New("UIStroke", {
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-                Transparency = 0.65,
-                ThemeTag = {Color = "DialogButtonBorder"}
-            }),
-            interface.HoverFrame,
-            interface.Title
-        })
-        
-        -- Set up hover animations
-        local _, setTransparency = Creator.SpringMotor(1, interface.HoverFrame, "BackgroundTransparency", isCompact)
-        
-        Creator.AddSignal(interface.Frame.MouseEnter, function()
-            setTransparency(0.97)
-        end)
-        
-        Creator.AddSignal(interface.Frame.MouseLeave, function()
-            setTransparency(1)
-        end)
-        
-        Creator.AddSignal(interface.Frame.MouseButton1Down, function()
-            setTransparency(1)
-        end)
-        
-        Creator.AddSignal(interface.Frame.MouseButton1Up, function()
-            setTransparency(0.97)
-        end)
-        
-        return interface
-    end
-
-    -- Notification Component
-    Components.Notification = {
-        Holder = nil
-    }
-
-    function Components.Notification.Init(self, parent)
-        self.Holder = Creator.New("Frame", {
-            Position = UDim2.new(1, -30, 1, -30),
-            Size = UDim2.new(0, 310, 1, -30),
-            AnchorPoint = Vector2.new(1, 1),
-            BackgroundTransparency = 1,
-            Parent = parent
-        }, {
-            Creator.New("UIListLayout", {
-                HorizontalAlignment = Enum.HorizontalAlignment.Center,
-                SortOrder = Enum.SortOrder.LayoutOrder,
-                VerticalAlignment = Enum.VerticalAlignment.Bottom,
-                Padding = UDim.new(0, 20)
-            })
-        })
-    end
-
-    function Components.Notification.New(self, options)
-        options.Title = options.Title or "Title"
-        options.Content = options.Content or "Content"
-        options.SubContent = options.SubContent or ""
-        options.Duration = options.Duration or nil
-        options.Buttons = options.Buttons or {}
-        
-        local interface = {Closed = false}
-        
-        -- Create acrylic background
-        interface.AcrylicPaint = Acrylic.AcrylicPaint()
-        
-        -- Create title
-        interface.Title = Creator.New("TextLabel", {
-            Position = UDim2.new(0, 14, 0, 17),
-            Text = options.Title,
-            RichText = true,
-            TextColor3 = Color3.fromRGB(255, 255, 255),
-            TextTransparency = 0,
-            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-            TextSize = 13,
-            TextXAlignment = "Left",
-            TextYAlignment = "Center",
-            Size = UDim2.new(1, -12, 0, 12),
-            TextWrapped = true,
-            BackgroundTransparency = 1,
-            ThemeTag = {TextColor3 = "Text"}
-        })
-        
-        -- Create content labels
-        interface.ContentLabel = Creator.New("TextLabel", {
-            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-            Text = options.Content,
-            TextColor3 = Color3.fromRGB(240, 240, 240),
-            TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            AutomaticSize = Enum.AutomaticSize.Y,
-            Size = UDim2.new(1, 0, 0, 14),
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = 1,
-            TextWrapped = true,
-            ThemeTag = {TextColor3 = "Text"}
-        })
-        
-        interface.SubContentLabel = Creator.New("TextLabel", {
-            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-            Text = options.SubContent,
-            TextColor3 = Color3.fromRGB(240, 240, 240),
-            TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            AutomaticSize = Enum.AutomaticSize.Y,
-            Size = UDim2.new(1, 0, 0, 14),
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = 1,
-            TextWrapped = true,
-            ThemeTag = {TextColor3 = "SubText"}
-        })
-        
-        -- Create label container
-        interface.LabelHolder = Creator.New("Frame", {
-            AutomaticSize = Enum.AutomaticSize.Y,
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(14, 40),
-            Size = UDim2.new(1, -28, 0, 0)
-        }, {
-            Creator.New("UIListLayout", {
-                SortOrder = Enum.SortOrder.LayoutOrder,
-                VerticalAlignment = Enum.VerticalAlignment.Center,
-                Padding = UDim.new(0, 3)
-            }),
-            interface.ContentLabel,
-            interface.SubContentLabel
-        })
-        
-        -- Create close button
-        interface.CloseButton = Creator.New("TextButton", {
-            Text = "",
-            Position = UDim2.new(1, -14, 0, 13),
-            Size = UDim2.fromOffset(20, 20),
-            AnchorPoint = Vector2.new(1, 0),
-            BackgroundTransparency = 1
-        }, {
-            Creator.New("ImageLabel", {
-                Image = "rbxassetid://9886659671", -- Close icon
-                Size = UDim2.fromOffset(16, 16),
-                Position = UDim2.fromScale(0.5, 0.5),
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                BackgroundTransparency = 1,
-                ThemeTag = {ImageColor3 = "Text"}
-            })
-        })
-        
-        -- Main notification frame
-        interface.Root = Creator.New("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 1, 0),
-            Position = UDim2.fromScale(1, 0)
-        }, {
-            interface.AcrylicPaint.Frame,
-            interface.Title,
-            interface.CloseButton,
-            interface.LabelHolder
-        })
-        
-        -- Handle empty content
-        if options.Content == "" then
-            interface.ContentLabel.Visible = false
-        end
-        
-        if options.SubContent == "" then
-            interface.SubContentLabel.Visible = false
-        end
-        
-        -- Create holder frame
-        interface.Holder = Creator.New("Frame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 200),
-            Parent = self.Holder
-        }, {
-            interface.Root
-        })
-        
-        -- Set up slide animation
-        local slideMotor = Flipper.GroupMotor.new({
-            Scale = 1,
-            Offset = 60
-        })
-        
-        slideMotor:onStep(function(values)
-            interface.Root.Position = UDim2.new(values.Scale, values.Offset, 0, 0)
-        end)
-        
-        -- Connect close button
-        Creator.AddSignal(interface.CloseButton.MouseButton1Click, function()
-            interface:Close()
-        end)
-        
-        -- Open animation
-        function interface.Open(_)
-            local labelHeight = interface.LabelHolder.AbsoluteSize.Y
-            interface.Holder.Size = UDim2.new(1, 0, 0, 58 + labelHeight)
-            
-            slideMotor:setGoal({
-                Scale = Flipper.Spring.new(0, {frequency = 5}),
-                Offset = Flipper.Spring.new(0, {frequency = 5})
-            })
-        end
-        
-        -- Close animation
-        function interface.Close(_)
-            if not interface.Closed then
-                interface.Closed = true
-                
-                task.spawn(function()
-                    slideMotor:setGoal({
-                        Scale = Flipper.Spring.new(1, {frequency = 5}),
-                        Offset = Flipper.Spring.new(60, {frequency = 5})
-                    })
-                    
-                    task.wait(0.4)
-                    if Celestial.UseAcrylic then
-                        interface.AcrylicPaint.Model:Destroy()
-                    end
-                    interface.Holder:Destroy()
-                end)
-            end
-        end
-        
-        -- Open the notification
-        interface:Open()
-        
-        -- Auto-close after duration
-        if options.Duration then
-            task.delay(options.Duration, function()
-                interface:Close()
-            end)
-        end
-        
-        return interface
-    end
-
-    -- Dialog Component
-    Components.Dialog = {Window = nil}
-
-    function Components.Dialog.Init(self, window)
-        self.Window = window
-        return self
-    end
-
-    function Components.Dialog.Create(_)
-        local interface = {Buttons = 0}
-        
-        -- Create the dialog background tint
-        interface.TintFrame = Creator.New("TextButton", {
-            Text = "",
-            Size = UDim2.fromScale(1, 1),
-            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-            BackgroundTransparency = 1,
-            Parent = Components.Dialog.Window.Root
-        }, {
-            Creator.New("UICorner", {
-                CornerRadius = UDim.new(0, 8)
-            })
-        })
-        
-        -- Set up animations
-        local _, setTintTransparency = Creator.SpringMotor(1, interface.TintFrame, "BackgroundTransparency", true)
-        
-        -- Button container
-        interface.ButtonHolder = Creator.New("Frame", {
-            Size = UDim2.new(1, -40, 1, -40),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            BackgroundTransparency = 1
-        }, {
-            Creator.New("UIListLayout", {
-                Padding = UDim.new(0, 10),
-                FillDirection = Enum.FillDirection.Horizontal,
-                HorizontalAlignment = Enum.HorizontalAlignment.Center,
-                SortOrder = Enum.SortOrder.LayoutOrder
-            })
-        })
-        
-        -- Button container frame with divider
-        interface.ButtonHolderFrame = Creator.New("Frame", {
-            Size = UDim2.new(1, 0, 0, 70),
-            Position = UDim2.new(0, 0, 1, -70),
-            ThemeTag = {BackgroundColor3 = "DialogHolder"}
-        }, {
-            Creator.New("Frame", {
-                Size = UDim2.new(1, 0, 0, 1),
-                ThemeTag = {BackgroundColor3 = "DialogHolderLine"}
-            }),
-            interface.ButtonHolder
-        })
-        
-        -- Dialog title
-        interface.Title = Creator.New("TextLabel", {
-            FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
-            Text = "Dialog",
-            TextColor3 = Color3.fromRGB(240, 240, 240),
-            TextSize = 22,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Size = UDim2.new(1, 0, 0, 22),
-            Position = UDim2.fromOffset(20, 25),
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = 1,
-            ThemeTag = {TextColor3 = "Text"}
-        })
-        
-        -- Scale animation
-        interface.Scale = Creator.New("UIScale", {Scale = 1})
-        local _, setScale = Creator.SpringMotor(1.1, interface.Scale, "Scale")
-        
-        -- Main dialog container
-        interface.Root = Creator.New("CanvasGroup", {
-            Size = UDim2.fromOffset(300, 165),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            GroupTransparency = 1,
-            Parent = interface.TintFrame,
-            ThemeTag = {BackgroundColor3 = "Dialog"}
-        }, {
-            Creator.New("UICorner", {
-                CornerRadius = UDim.new(0, 8)
-            }),
-            Creator.New("UIStroke", {
-                Transparency = 0.5,
-                ThemeTag = {Color = "DialogBorder"}
-            }),
-            interface.Scale,
-            interface.Title,
-            interface.ButtonHolderFrame
-        })
-        
-        -- Dialog open/close animations
-        local _, setTransparency = Creator.SpringMotor(1, interface.Root, "GroupTransparency")
-        
-        function interface.Open(_)
-            Celestial.DialogOpen = true
-            interface.Scale.Scale = 1.1
-            setTintTransparency(0.75)
-            setTransparency(0)
-            setScale(1)
-        end
-        
-        function interface.Close(_)
-            Celestial.DialogOpen = false
-            setTintTransparency(1)
-            setTransparency(1)
-            setScale(1.1)
-            interface.Root.UIStroke:Destroy()
-            task.wait(0.15)
-            interface.TintFrame:Destroy()
-        end
-        
-        -- Add a button to the dialog
-        function interface.Button(_, text, callback)
-            interface.Buttons = interface.Buttons + 1
-            text = text or "Button"
-            callback = callback or function() end
-            
-            local buttonComponent = Components.Button(text, interface.ButtonHolder, true)
-            buttonComponent.Title.Text = text
-            
-            -- Resize buttons to fit evenly
-            for _, child in next, interface.ButtonHolder:GetChildren() do
-                if child:IsA("TextButton") then
-                    child.Size = UDim2.new(1/interface.Buttons, -(((interface.Buttons-1)*10)/interface.Buttons), 0, 32)
-                end
-            end
-            
-            -- Connect button callback
-            Creator.AddSignal(buttonComponent.Frame.MouseButton1Click, function()
-                Celestial:SafeCallback(callback)
-                pcall(function() interface:Close() end)
-            end)
-            
-            return buttonComponent
-        end
-        
-        return interface
-    end
-
-    -- More component definitions would go here
-    -- Section, Tab, Window, TitleBar, etc.
-end
-
---//////////////////////////////////////////////////////////////////////////////////--
---                               UI ELEMENT MODULES                                 --
---//////////////////////////////////////////////////////////////////////////////////--
-
--- Button Element
-do
-    local Button = {}
-    Button.__index = Button
-    Button.__type = "Button"
-
-    function Button.New(container, config)
-        assert(config.Title, "Button - Missing Title")
-        config.Callback = config.Callback or function() end
-        
-        local element = Components.Element(config.Title, config.Description, container.Container, true)
-        
-        -- Add button icon
-        local icon = Creator.New("ImageLabel", {
-            Image = "rbxassetid://10709791437",
-            Size = UDim2.fromOffset(16, 16),
-            AnchorPoint = Vector2.new(1, 0.5),
-            Position = UDim2.new(1, -10, 0.5, 0),
-            BackgroundTransparency = 1,
-            Parent = element.Frame,
-            ThemeTag = {ImageColor3 = "Text"}
-        })
-        
-        -- Connect click callback
-        Creator.AddSignal(element.Frame.MouseButton1Click, function()
-            container.Library:SafeCallback(config.Callback)
-        end)
-        
-        return element
-    end
-
-    Elements.Button = Button
-end
-
--- Toggle Element
-do
-    local Toggle = {}
-    Toggle.__index = Toggle
-    Toggle.__type = "Toggle"
-
-    function Toggle.New(container, title, options)
-        local library = container.Library
-        
-        assert(options.Title, "Toggle - Missing Title")
-        
-        local toggle = {
-            Value = options.Default or false,
-            Callback = options.Callback or function() end,
-            Type = "Toggle"
-        }
-        
-        -- Create element
-        local element = Components.Element(options.Title, options.Description, container.Container, true)
-        element.DescLabel.Size = UDim2.new(1, -54, 0, 14)
-        
-        toggle.SetTitle = element.SetTitle
-        toggle.SetDesc = element.SetDesc
-        
-        -- Create toggle indicator
-        local indicatorIcon = Creator.New("ImageLabel", {
-            AnchorPoint = Vector2.new(0, 0.5),
-            Size = UDim2.fromOffset(14, 14),
-            Position = UDim2.new(0, 2, 0.5, 0),
-            Image = "rbxassetid://12266946128",
-            ImageTransparency = 0.5,
-            ThemeTag = {ImageColor3 = "ToggleSlider"}
-        })
-        
-        local strokeEffect = Creator.New("UIStroke", {
-            Transparency = 0.5,
-            ThemeTag = {Color = "ToggleSlider"}
-        })
-        
-        -- Create toggle background
-        local toggleBackground = Creator.New("Frame", {
-            Size = UDim2.fromOffset(36, 18),
-            AnchorPoint = Vector2.new(1, 0.5),
-            Position = UDim2.new(1, -10, 0.5, 0),
-            Parent = element.Frame,
-            BackgroundTransparency = 1,
-            ThemeTag = {BackgroundColor3 = "Accent"}
-        }, {
-            Creator.New("UICorner", {
-                CornerRadius = UDim.new(0, 9)
-            }),
-            strokeEffect,
-            indicatorIcon
-        })
-        
-        -- Handle value changes
-        function toggle.OnChanged(self, callback)
-            toggle.Changed = callback
-            callback(toggle.Value)
-        end
-        
-        -- Set toggle value
-        function toggle.SetValue(self, value)
-            value = not not value -- Convert to boolean
-            toggle.Value = value
-            
-            -- Update the toggle appearance
-            Creator.OverrideTag(strokeEffect, {Color = toggle.Value and "Accent" or "ToggleSlider"})
-            Creator.OverrideTag(indicatorIcon, {ImageColor3 = toggle.Value and "ToggleToggled" or "ToggleSlider"})
-            
-            -- Animate the indicator
-            TweenService:Create(
-                indicatorIcon, 
-                TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), 
-                {Position = UDim2.new(0, toggle.Value and 19 or 2, 0.5, 0)}
-            ):Play()
-            
-            -- Animate the background
-            TweenService:Create(
-                toggleBackground, 
-                TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), 
-                {BackgroundTransparency = toggle.Value and 0 or 1}
-            ):Play()
-            
-            -- Update the icon transparency
-            indicatorIcon.ImageTransparency = toggle.Value and 0 or 0.5
-            
-            -- Call callbacks
-            library:SafeCallback(toggle.Callback, toggle.Value)
-            library:SafeCallback(toggle.Changed, toggle.Value)
-        end
-        
-        -- Cleanup
-        function toggle.Destroy(self)
-            element:Destroy()
-            library.Options[title] = nil
-        end
-        
-        -- Toggle on click
-        Creator.AddSignal(element.Frame.MouseButton1Click, function()
-            toggle:SetValue(not toggle.Value)
-        end)
-        
-        -- Initialize with default value
-        toggle:SetValue(toggle.Value)
-        
-        -- Register with library
-        library.Options[title] = toggle
-        
-        return toggle
-    end
-
-    Elements.Toggle = Toggle
-end
-
--- Add the rest of your UI elements (Colorpicker, Dropdown, Slider, etc.) here
-
---//////////////////////////////////////////////////////////////////////////////////--
---                               MAIN CELESTIAL MODULE                              --
---//////////////////////////////////////////////////////////////////////////////////--
-
--- Initialize UI container
-local MainGui = Creator.New("ScreenGui", {
-    Parent = RunService:IsStudio() and LocalPlayer.PlayerGui or game:GetService("CoreGui")
-})
-
-local ProtectGui = protectgui or (syn and syn.protect_gui) or function() end
-ProtectGui(MainGui)
-
-Components.Notification:Init(MainGui)
-
--- Library setup
+-- Core Properties
 Celestial = {
     Version = "1.0.0",
     OpenFrames = {},
     Options = {},
-    Themes = Themes.Names,
+    Themes = {"Dark", "Darker", "Light", "Aqua", "Amethyst", "Rose"},
     Window = nil,
     WindowFrame = nil,
     Unloaded = false,
@@ -1916,10 +27,22 @@ Celestial = {
     Transparency = true,
     MinimizeKeybind = nil,
     MinimizeKey = Enum.KeyCode.LeftControl,
-    GUI = MainGui
+    GUI = nil
 }
 
--- Safely execute callbacks with error handling
+-- Initialize UI container
+local MainGui = Instance.new("ScreenGui")
+MainGui.Name = "CelestialUI"
+MainGui.ResetOnSpawn = false
+MainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+MainGui.Parent = RunService:IsStudio() and LocalPlayer.PlayerGui or game:GetService("CoreGui")
+
+local ProtectGui = protectgui or (syn and syn.protect_gui) or function() end
+ProtectGui(MainGui)
+
+Celestial.GUI = MainGui
+
+-- Callback handling with error handling
 function Celestial.SafeCallback(_, callback, ...)
     if not callback then 
         return 
@@ -1930,7 +53,7 @@ function Celestial.SafeCallback(_, callback, ...)
         local _, endPos = errorMsg:find(":%d+: ")
         if not endPos then 
             return Celestial:Notify({
-                Title = "Celestial",
+                Title = "Error",
                 Content = "Callback error",
                 SubContent = errorMsg,
                 Duration = 5
@@ -1938,7 +61,7 @@ function Celestial.SafeCallback(_, callback, ...)
         end
         
         return Celestial:Notify({
-            Title = "Celestial",
+            Title = "Error",
             Content = "Callback error",
             SubContent = errorMsg:sub(endPos + 1),
             Duration = 5
@@ -1946,138 +69,1025 @@ function Celestial.SafeCallback(_, callback, ...)
     end
 end
 
--- Precision rounding utility
-function Celestial.Round(_, value, decimalPlaces)
-    if decimalPlaces == 0 then 
-        return math.floor(value)
-    end
-    
-    value = tostring(value)
-    return value:find("%.") and tonumber(value:sub(1, value:find("%.")+decimalPlaces)) or value
-end
-
--- Icon system
-local Icons = {
-    assets = {
-        ['lucide-close'] = 'rbxassetid://9886659671',
-        ['lucide-min'] = 'rbxassetid://9886659276',
-        ['lucide-max'] = 'rbxassetid://9886659406',
-        ['lucide-restore'] = 'rbxassetid://9886659001'
-        -- Add more icons as needed
-    }
-}
-
-function Celestial.GetIcon(_, name, specificIcon)
-    if specificIcon ~= nil and Icons.assets["lucide-"..specificIcon] then
-        return Icons.assets["lucide-"..specificIcon]
-    end
-    return nil
-end
-
--- Element interface for UI components
-local ElementInterface = {}
-ElementInterface.__index = ElementInterface
-ElementInterface.__namecall = function(self, method, ...)
-    return ElementInterface[method](...)
-end
-
--- Register all UI elements
-for _, Element in pairs(Elements) do
-    ElementInterface["Add"..Element.__type] = function(container, props, options)
-        Element.Container = container.Container
-        Element.Type = container.Type
-        Element.ScrollFrame = container.ScrollFrame
-        Element.Library = Celestial
-        return Element.New(container, props, options)
-    end
-end
-
-Celestial.Elements = ElementInterface
-
 -- Create the main window of the UI
-function Celestial.CreateWindow(_, config)
+function Celestial:CreateWindow(config)
     assert(config.Title, "Window - Missing Title")
     
-    if Celestial.Window then
+    if self.Window then
         print("You cannot create more than one window.")
         return
     end
     
-    Celestial.MinimizeKey = config.MinimizeKey
-    Celestial.UseAcrylic = config.Acrylic
+    self.MinimizeKey = config.MinimizeKey
+    self.UseAcrylic = config.Acrylic or false
     
-    if config.Acrylic then
-        Acrylic.init()
+    -- Create the main window container
+    local windowContainer = Instance.new("Frame")
+    windowContainer.Name = "WindowContainer"
+    windowContainer.Size = config.Size or UDim2.fromOffset(600, 400)
+    windowContainer.Position = UDim2.fromScale(0.5, 0.5)
+    windowContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+    windowContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    windowContainer.BackgroundTransparency = 0.1
+    windowContainer.BorderSizePixel = 0
+    windowContainer.Parent = self.GUI
+    
+    -- Add rounded corners
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, 8)
+    uiCorner.Parent = windowContainer
+    
+    -- Create title bar
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    titleBar.BackgroundTransparency = 0.2
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = windowContainer
+    
+    -- Add rounded corners to title bar (top only)
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 8)
+    titleCorner.Parent = titleBar
+    
+    -- Title text
+    local titleText = Instance.new("TextLabel")
+    titleText.Name = "Title"
+    titleText.Size = UDim2.new(1, -80, 1, 0)
+    titleText.Position = UDim2.fromOffset(10, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.Text = config.Title
+    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleText.TextSize = 18
+    titleText.Font = Enum.Font.GothamSemibold
+    titleText.TextXAlignment = Enum.TextXAlignment.Left
+    titleText.Parent = titleBar
+    
+    -- Subtitle text
+    if config.SubTitle then
+        local subtitleText = Instance.new("TextLabel")
+        subtitleText.Name = "SubTitle"
+        subtitleText.Size = UDim2.new(0, 100, 1, 0)
+        subtitleText.Position = UDim2.new(0, titleText.AbsoluteSize.X + 15, 0, 0)
+        subtitleText.BackgroundTransparency = 1
+        subtitleText.Text = config.SubTitle
+        subtitleText.TextColor3 = Color3.fromRGB(180, 180, 180)
+        subtitleText.TextSize = 14
+        subtitleText.Font = Enum.Font.Gotham
+        subtitleText.TextXAlignment = Enum.TextXAlignment.Left
+        subtitleText.Parent = titleBar
     end
     
-    -- Create the window (simplified - in real implementation, this would call Window.lua)
-    local windowInstance = {
-        Parent = MainGui,
-        Size = config.Size,
+    -- Close button
+    local closeButton = Instance.new("TextButton")
+    closeButton.Name = "CloseButton"
+    closeButton.Size = UDim2.fromOffset(30, 30)
+    closeButton.Position = UDim2.new(1, -35, 0, 5)
+    closeButton.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+    closeButton.BackgroundTransparency = 0.8
+    closeButton.Text = ""
+    closeButton.AutoButtonColor = false
+    closeButton.Parent = titleBar
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 8)
+    closeCorner.Parent = closeButton
+    
+    closeButton.MouseButton1Click:Connect(function()
+        self:Destroy()
+    end)
+    
+    -- Create tab container
+    local tabWidth = config.TabWidth or 160
+    local tabContainer = Instance.new("Frame")
+    tabContainer.Name = "TabContainer"
+    tabContainer.Size = UDim2.new(0, tabWidth, 1, -50)
+    tabContainer.Position = UDim2.fromOffset(10, 45)
+    tabContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    tabContainer.BackgroundTransparency = 0.3
+    tabContainer.BorderSizePixel = 0
+    tabContainer.Parent = windowContainer
+    
+    local tabCorner = Instance.new("UICorner")
+    tabCorner.CornerRadius = UDim.new(0, 8)
+    tabCorner.Parent = tabContainer
+    
+    -- Create tab holder ScrollingFrame
+    local tabHolder = Instance.new("ScrollingFrame")
+    tabHolder.Name = "TabHolder"
+    tabHolder.Size = UDim2.fromScale(1, 1)
+    tabHolder.BackgroundTransparency = 1
+    tabHolder.BorderSizePixel = 0
+    tabHolder.ScrollBarThickness = 0
+    tabHolder.ScrollBarImageTransparency = 1
+    tabHolder.Parent = tabContainer
+    
+    local tabLayout = Instance.new("UIListLayout")
+    tabLayout.Padding = UDim.new(0, 5)
+    tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    tabLayout.Parent = tabHolder
+    
+    local tabPadding = Instance.new("UIPadding")
+    tabPadding.PaddingTop = UDim.new(0, 5)
+    tabPadding.Parent = tabHolder
+    
+    -- Create content container
+    local contentContainer = Instance.new("Frame")
+    contentContainer.Name = "ContentContainer"
+    contentContainer.Size = UDim2.new(1, -(tabWidth + 25), 1, -50)
+    contentContainer.Position = UDim2.new(0, tabWidth + 15, 0, 45)
+    contentContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    contentContainer.BackgroundTransparency = 0.3
+    contentContainer.BorderSizePixel = 0
+    contentContainer.ClipsDescendants = true
+    contentContainer.Parent = windowContainer
+    
+    local contentCorner = Instance.new("UICorner")
+    contentCorner.CornerRadius = UDim.new(0, 8)
+    contentCorner.Parent = contentContainer
+    
+    -- Window properties
+    local window = {
+        Root = windowContainer,
+        TabHolder = tabHolder,
+        ContainerHolder = contentContainer,
         Title = config.Title,
         SubTitle = config.SubTitle,
-        TabWidth = config.TabWidth
+        Tabs = {},
+        TabCount = 0,
+        SelectedTab = nil
     }
     
-    Celestial.Window = windowInstance
-    Celestial:SetTheme(config.Theme)
+    -- Store in main Celestial object
+    self.Window = window
     
-    return windowInstance
-end
-
--- Set the UI theme
-function Celestial.SetTheme(_, themeName)
-    if Celestial.Window and table.find(Celestial.Themes, themeName) then
-        Celestial.Theme = themeName
-        Creator.UpdateTheme()
-    end
-end
-
--- Cleanup and destroy the UI
-function Celestial.Destroy(_)
-    if Celestial.Window then
-        Celestial.Unloaded = true
-        
-        if Celestial.UseAcrylic then
-            Celestial.Window.AcrylicPaint.Model:Destroy()
-        end
-        
-        Creator.Disconnect()
-        Celestial.GUI:Destroy()
-    end
-end
-
--- Toggle acrylic effect
-function Celestial.ToggleAcrylic(_, enabled)
-    if Celestial.Window then
-        if Celestial.UseAcrylic then
-            Celestial.Acrylic = enabled
-            Celestial.Window.AcrylicPaint.Model.Transparency = enabled and 0.98 or 1
+    -- Allow dragging the window
+    local isDragging = false
+    local dragInput = nil
+    local dragStart = nil
+    local startPos = nil
+    
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+            dragStart = input.Position
+            startPos = windowContainer.Position
             
-            if enabled then
-                Acrylic.Enable()
-            else
-                Acrylic.Disable()
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    isDragging = false
+                end
+            end)
+        end
+    end)
+    
+    titleBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and isDragging then
+            local delta = input.Position - dragStart
+            windowContainer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    
+    -- Tab system
+    function window:AddTab(config)
+        self.TabCount = self.TabCount + 1
+        local tabIndex = self.TabCount
+        
+        -- Create tab button
+        local tabButton = Instance.new("TextButton")
+        tabButton.Name = "Tab_" .. config.Title
+        tabButton.Size = UDim2.new(0.9, 0, 0, 32)
+        tabButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        tabButton.BackgroundTransparency = 0.7
+        tabButton.Text = config.Title
+        tabButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+        tabButton.TextSize = 14
+        tabButton.Font = Enum.Font.GothamSemibold
+        tabButton.AutoButtonColor = false
+        tabButton.Parent = self.TabHolder
+        
+        local tabButtonCorner = Instance.new("UICorner")
+        tabButtonCorner.CornerRadius = UDim.new(0, 4)
+        tabButtonCorner.Parent = tabButton
+        
+        -- Add icon if specified
+        if config.Icon then
+            -- You would implement icon handling here
+            -- For simplicity, we're skipping this for now
+        end
+        
+        -- Create tab content container
+        local tabContent = Instance.new("ScrollingFrame")
+        tabContent.Name = "TabContent_" .. config.Title
+        tabContent.Size = UDim2.fromScale(1, 1)
+        tabContent.BackgroundTransparency = 1
+        tabContent.BorderSizePixel = 0
+        tabContent.ScrollBarThickness = 2
+        tabContent.ScrollingDirection = Enum.ScrollingDirection.Y
+        tabContent.CanvasSize = UDim2.fromScale(0, 0)
+        tabContent.Visible = false
+        tabContent.Parent = self.ContainerHolder
+        
+        local contentLayout = Instance.new("UIListLayout")
+        contentLayout.Padding = UDim.new(0, 6)
+        contentLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        contentLayout.Parent = tabContent
+        
+        local contentPadding = Instance.new("UIPadding")
+        contentPadding.PaddingTop = UDim.new(0, 8)
+        contentPadding.PaddingBottom = UDim.new(0, 8)
+        contentPadding.Parent = tabContent
+        
+        -- Update canvas size when content changes
+        contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            tabContent.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 16)
+        end)
+        
+        -- Tab object
+        local tab = {
+            Button = tabButton,
+            Container = tabContent,
+            Title = config.Title,
+            Icon = config.Icon,
+            Sections = {},
+            Index = tabIndex
+        }
+        
+        -- Add section function
+        function tab:AddSection(name)
+            local sectionContainer = Instance.new("Frame")
+            sectionContainer.Name = "Section_" .. name
+            sectionContainer.Size = UDim2.new(1, -20, 0, 36)
+            sectionContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+            sectionContainer.BackgroundTransparency = 0.4
+            sectionContainer.BorderSizePixel = 0
+            sectionContainer.ClipsDescendants = true
+            sectionContainer.AutomaticSize = Enum.AutomaticSize.Y
+            sectionContainer.Parent = self.Container
+            
+            local sectionCorner = Instance.new("UICorner")
+            sectionCorner.CornerRadius = UDim.new(0, 6)
+            sectionCorner.Parent = sectionContainer
+            
+            -- Section title
+            local sectionTitle = Instance.new("TextLabel")
+            sectionTitle.Name = "Title"
+            sectionTitle.Size = UDim2.new(1, -16, 0, 26)
+            sectionTitle.Position = UDim2.fromOffset(8, 4)
+            sectionTitle.BackgroundTransparency = 1
+            sectionTitle.Text = name
+            sectionTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+            sectionTitle.TextSize = 14
+            sectionTitle.Font = Enum.Font.GothamSemibold
+            sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+            sectionTitle.Parent = sectionContainer
+            
+            -- Elements container
+            local elementsContainer = Instance.new("Frame")
+            elementsContainer.Name = "Elements"
+            elementsContainer.Size = UDim2.new(1, -16, 0, 0)
+            elementsContainer.Position = UDim2.fromOffset(8, 30)
+            elementsContainer.BackgroundTransparency = 1
+            elementsContainer.BorderSizePixel = 0
+            elementsContainer.AutomaticSize = Enum.AutomaticSize.Y
+            elementsContainer.Parent = sectionContainer
+            
+            local elementsLayout = Instance.new("UIListLayout")
+            elementsLayout.Padding = UDim.new(0, 6)
+            elementsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            elementsLayout.Parent = elementsContainer
+            
+            -- Update section container size based on elements
+            elementsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                elementsContainer.Size = UDim2.new(1, -16, 0, elementsLayout.AbsoluteContentSize.Y)
+                sectionContainer.Size = UDim2.new(1, -20, 0, elementsContainer.Size.Y.Offset + 36)
+            end)
+            
+            -- Section object
+            local section = {
+                Container = elementsContainer,
+                Title = name,
+                Elements = {},
+                Window = window
+            }
+            
+            -- UI Element functions
+            -- Button element
+            function section:AddButton(config)
+                assert(config.Title, "Button missing Title")
+                
+                local buttonFrame = Instance.new("Frame")
+                buttonFrame.Name = "Button_" .. config.Title
+                buttonFrame.Size = UDim2.new(1, 0, 0, 32)
+                buttonFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                buttonFrame.BackgroundTransparency = 0.6
+                buttonFrame.BorderSizePixel = 0
+                buttonFrame.Parent = self.Container
+                
+                local buttonCorner = Instance.new("UICorner")
+                buttonCorner.CornerRadius = UDim.new(0, 4)
+                buttonCorner.Parent = buttonFrame
+                
+                local buttonText = Instance.new("TextLabel")
+                buttonText.Name = "Title"
+                buttonText.Size = UDim2.new(1, -16, 1, 0)
+                buttonText.Position = UDim2.fromOffset(8, 0)
+                buttonText.BackgroundTransparency = 1
+                buttonText.Text = config.Title
+                buttonText.TextColor3 = Color3.fromRGB(255, 255, 255)
+                buttonText.TextSize = 14
+                buttonText.Font = Enum.Font.Gotham
+                buttonText.TextXAlignment = Enum.TextXAlignment.Left
+                buttonText.Parent = buttonFrame
+                
+                -- Add description
+                if config.Description then
+                    buttonText.Size = UDim2.new(1, -16, 0, 18)
+                    buttonText.Position = UDim2.fromOffset(8, 4)
+                    
+                    local buttonDesc = Instance.new("TextLabel")
+                    buttonDesc.Name = "Description"
+                    buttonDesc.Size = UDim2.new(1, -16, 0, 14)
+                    buttonDesc.Position = UDim2.fromOffset(8, 20)
+                    buttonDesc.BackgroundTransparency = 1
+                    buttonDesc.Text = config.Description
+                    buttonDesc.TextColor3 = Color3.fromRGB(180, 180, 180)
+                    buttonDesc.TextSize = 12
+                    buttonDesc.Font = Enum.Font.Gotham
+                    buttonDesc.TextXAlignment = Enum.TextXAlignment.Left
+                    buttonDesc.Parent = buttonFrame
+                end
+                
+                -- Clickable button
+                local clickButton = Instance.new("TextButton")
+                clickButton.Name = "ClickButton"
+                clickButton.Size = UDim2.fromScale(1, 1)
+                clickButton.BackgroundTransparency = 1
+                clickButton.Text = ""
+                clickButton.Parent = buttonFrame
+                
+                -- Connect click callback
+                clickButton.MouseButton1Click:Connect(function()
+                    Celestial:SafeCallback(config.Callback)
+                end)
+                
+                -- Hover effect
+                clickButton.MouseEnter:Connect(function()
+                    buttonFrame.BackgroundTransparency = 0.4
+                end)
+                
+                clickButton.MouseLeave:Connect(function()
+                    buttonFrame.BackgroundTransparency = 0.6
+                end)
+                
+                return {
+                    SetTitle = function(_, text)
+                        buttonText.Text = text
+                    end,
+                    SetDesc = function(_, text)
+                        if buttonFrame:FindFirstChild("Description") then
+                            buttonFrame.Description.Text = text
+                        end
+                    end
+                }
             end
+            
+            -- Toggle element
+            function section:AddToggle(config)
+                assert(config.Title, "Toggle missing Title")
+                
+                local toggleFrame = Instance.new("Frame")
+                toggleFrame.Name = "Toggle_" .. config.Title
+                toggleFrame.Size = UDim2.new(1, 0, 0, 32)
+                toggleFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                toggleFrame.BackgroundTransparency = 0.6
+                toggleFrame.BorderSizePixel = 0
+                toggleFrame.Parent = self.Container
+                
+                local toggleCorner = Instance.new("UICorner")
+                toggleCorner.CornerRadius = UDim.new(0, 4)
+                toggleCorner.Parent = toggleFrame
+                
+                local toggleText = Instance.new("TextLabel")
+                toggleText.Name = "Title"
+                toggleText.Size = UDim2.new(1, -56, 1, 0)
+                toggleText.Position = UDim2.fromOffset(8, 0)
+                toggleText.BackgroundTransparency = 1
+                toggleText.Text = config.Title
+                toggleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+                toggleText.TextSize = 14
+                toggleText.Font = Enum.Font.Gotham
+                toggleText.TextXAlignment = Enum.TextXAlignment.Left
+                toggleText.Parent = toggleFrame
+                
+                -- Add description
+                if config.Description then
+                    toggleText.Size = UDim2.new(1, -56, 0, 18)
+                    toggleText.Position = UDim2.fromOffset(8, 4)
+                    
+                    local toggleDesc = Instance.new("TextLabel")
+                    toggleDesc.Name = "Description"
+                    toggleDesc.Size = UDim2.new(1, -56, 0, 14)
+                    toggleDesc.Position = UDim2.fromOffset(8, 20)
+                    toggleDesc.BackgroundTransparency = 1
+                    toggleDesc.Text = config.Description
+                    toggleDesc.TextColor3 = Color3.fromRGB(180, 180, 180)
+                    toggleDesc.TextSize = 12
+                    toggleDesc.Font = Enum.Font.Gotham
+                    toggleDesc.TextXAlignment = Enum.TextXAlignment.Left
+                    toggleDesc.Parent = toggleFrame
+                end
+                
+                -- Toggle indicator
+                local toggleIndicator = Instance.new("Frame")
+                toggleIndicator.Name = "Indicator"
+                toggleIndicator.Size = UDim2.fromOffset(40, 20)
+                toggleIndicator.Position = UDim2.new(1, -48, 0.5, 0)
+                toggleIndicator.AnchorPoint = Vector2.new(0, 0.5)
+                toggleIndicator.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                toggleIndicator.BorderSizePixel = 0
+                toggleIndicator.Parent = toggleFrame
+                
+                local indicatorCorner = Instance.new("UICorner")
+                indicatorCorner.CornerRadius = UDim.new(1, 0)
+                indicatorCorner.Parent = toggleIndicator
+                
+                local toggle = Instance.new("Frame")
+                toggle.Name = "Toggle"
+                toggle.Size = UDim2.fromOffset(16, 16)
+                toggle.Position = UDim2.fromOffset(2, 2)
+                toggle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                toggle.BorderSizePixel = 0
+                toggle.Parent = toggleIndicator
+                
+                local toggleCorner = Instance.new("UICorner")
+                toggleCorner.CornerRadius = UDim.new(1, 0)
+                toggleCorner.Parent = toggle
+                
+                -- Toggle state
+                local toggleState = config.Default or false
+                local toggled = toggleState
+                
+                -- Update the toggle appearance
+                local function updateToggle()
+                    if toggled then
+                        TweenService:Create(toggleIndicator, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 170, 255)}):Play()
+                        TweenService:Create(toggle, TweenInfo.new(0.2), {Position = UDim2.fromOffset(22, 2)}):Play()
+                    else
+                        TweenService:Create(toggleIndicator, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 60)}):Play()
+                        TweenService:Create(toggle, TweenInfo.new(0.2), {Position = UDim2.fromOffset(2, 2)}):Play()
+                    end
+                end
+                
+                -- Initial state
+                updateToggle()
+                
+                -- Clickable button
+                local clickButton = Instance.new("TextButton")
+                clickButton.Name = "ClickButton"
+                clickButton.Size = UDim2.fromScale(1, 1)
+                clickButton.BackgroundTransparency = 1
+                clickButton.Text = ""
+                clickButton.Parent = toggleFrame
+                
+                -- Toggle interface
+                local toggleInterface = {
+                    Value = toggled,
+                    
+                    SetValue = function(self, value)
+                        toggled = value
+                        self.Value = value
+                        updateToggle()
+                        Celestial:SafeCallback(config.Callback, toggled)
+                    end,
+                    
+                    OnChanged = function(self, callback)
+                        self.Changed = callback
+                        callback(self.Value)
+                    end,
+                    
+                    SetTitle = function(_, text)
+                        toggleText.Text = text
+                    end,
+                    
+                    SetDesc = function(_, text)
+                        if toggleFrame:FindFirstChild("Description") then
+                            toggleFrame.Description.Text = text
+                        end
+                    end
+                }
+                
+                -- Connect click callback
+                clickButton.MouseButton1Click:Connect(function()
+                    toggled = not toggled
+                    toggleInterface:SetValue(toggled)
+                end)
+                
+                -- Hover effect
+                clickButton.MouseEnter:Connect(function()
+                    toggleFrame.BackgroundTransparency = 0.4
+                end)
+                
+                clickButton.MouseLeave:Connect(function()
+                    toggleFrame.BackgroundTransparency = 0.6
+                end)
+                
+                return toggleInterface
+            end
+            
+            -- Add more UI elements here (Slider, Dropdown, etc.)
+            
+            -- Paragraph element
+            function section:AddParagraph(config)
+                assert(config.Title, "Paragraph missing Title")
+                
+                local paragraphFrame = Instance.new("Frame")
+                paragraphFrame.Name = "Paragraph_" .. config.Title
+                paragraphFrame.Size = UDim2.new(1, 0, 0, 60) -- Dynamic sizing
+                paragraphFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                paragraphFrame.BackgroundTransparency = 0.6
+                paragraphFrame.BorderSizePixel = 0
+                paragraphFrame.AutomaticSize = Enum.AutomaticSize.Y
+                paragraphFrame.Parent = self.Container
+                
+                local paragraphCorner = Instance.new("UICorner")
+                paragraphCorner.CornerRadius = UDim.new(0, 4)
+                paragraphCorner.Parent = paragraphFrame
+                
+                local paragraphTitle = Instance.new("TextLabel")
+                paragraphTitle.Name = "Title"
+                paragraphTitle.Size = UDim2.new(1, -16, 0, 20)
+                paragraphTitle.Position = UDim2.fromOffset(8, 8)
+                paragraphTitle.BackgroundTransparency = 1
+                paragraphTitle.Text = config.Title
+                paragraphTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+                paragraphTitle.TextSize = 16
+                paragraphTitle.Font = Enum.Font.GothamSemibold
+                paragraphTitle.TextXAlignment = Enum.TextXAlignment.Left
+                paragraphTitle.Parent = paragraphFrame
+                
+                local paragraphContent = Instance.new("TextLabel")
+                paragraphContent.Name = "Content"
+                paragraphContent.Size = UDim2.new(1, -16, 0, 0)
+                paragraphContent.Position = UDim2.fromOffset(8, 32)
+                paragraphContent.BackgroundTransparency = 1
+                paragraphContent.Text = config.Content or ""
+                paragraphContent.TextColor3 = Color3.fromRGB(200, 200, 200)
+                paragraphContent.TextSize = 14
+                paragraphContent.Font = Enum.Font.Gotham
+                paragraphContent.TextXAlignment = Enum.TextXAlignment.Left
+                paragraphContent.TextYAlignment = Enum.TextYAlignment.Top
+                paragraphContent.TextWrapped = true
+                paragraphContent.AutomaticSize = Enum.AutomaticSize.Y
+                paragraphContent.Parent = paragraphFrame
+                
+                -- Add padding at the bottom
+                local padding = Instance.new("Frame")
+                padding.Name = "Padding"
+                padding.Size = UDim2.new(1, 0, 0, 8)
+                padding.Position = UDim2.new(0, 0, 1, 0)
+                padding.AnchorPoint = Vector2.new(0, 1)
+                padding.BackgroundTransparency = 1
+                padding.Parent = paragraphFrame
+                
+                -- Update frame size based on content
+                paragraphContent:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                    paragraphFrame.Size = UDim2.new(1, 0, 0, paragraphContent.AbsoluteSize.Y + 40)
+                end)
+                
+                return {
+                    SetTitle = function(_, text)
+                        paragraphTitle.Text = text
+                    end,
+                    
+                    SetContent = function(_, text)
+                        paragraphContent.Text = text
+                    end
+                }
+            end
+            
+            -- Add more UI elements as needed...
+            
+            table.insert(self.Sections, section)
+            return section
+        end
+        
+        -- Connect tab click
+        tabButton.MouseButton1Click:Connect(function()
+            window:SelectTab(tabIndex)
+        end)
+        
+        self.Tabs[tabIndex] = tab
+        
+        -- Select this tab if it's the first one
+        if tabIndex == 1 then
+            window:SelectTab(1)
+        end
+        
+        return tab
+    end
+    
+    -- Select a tab
+    function window:SelectTab(index)
+        -- Hide all tab contents
+        for _, tab in pairs(self.Tabs) do
+            tab.Container.Visible = false
+            tab.Button.BackgroundTransparency = 0.7
+            tab.Button.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+        
+        -- Show the selected tab
+        local selectedTab = self.Tabs[index]
+        if selectedTab then
+            selectedTab.Container.Visible = true
+            selectedTab.Button.BackgroundTransparency = 0.5
+            selectedTab.Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+            self.SelectedTab = index
         end
     end
+    
+    -- Minimize the window
+    function window:Minimize()
+        self.Minimized = not self.Minimized
+        self.Root.Visible = not self.Minimized
+    end
+    
+    -- Simple dialog implementation
+    function window:Dialog(config)
+        -- Create dialog background
+        local dialogBg = Instance.new("Frame")
+        dialogBg.Name = "DialogBackground"
+        dialogBg.Size = UDim2.fromScale(1, 1)
+        dialogBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        dialogBg.BackgroundTransparency = 0.5
+        dialogBg.BorderSizePixel = 0
+        dialogBg.Parent = self.Root
+        
+        -- Create dialog
+        local dialog = Instance.new("Frame")
+        dialog.Name = "Dialog"
+        dialog.Size = UDim2.fromOffset(300, 150)
+        dialog.Position = UDim2.fromScale(0.5, 0.5)
+        dialog.AnchorPoint = Vector2.new(0.5, 0.5)
+        dialog.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        dialog.BorderSizePixel = 0
+        dialog.Parent = dialogBg
+        
+        local dialogCorner = Instance.new("UICorner")
+        dialogCorner.CornerRadius = UDim.new(0, 8)
+        dialogCorner.Parent = dialog
+        
+        -- Dialog title
+        local title = Instance.new("TextLabel")
+        title.Name = "Title"
+        title.Size = UDim2.new(1, -20, 0, 30)
+        title.Position = UDim2.fromOffset(10, 10)
+        title.BackgroundTransparency = 1
+        title.Text = config.Title or "Dialog"
+        title.TextColor3 = Color3.fromRGB(255, 255, 255)
+        title.TextSize = 18
+        title.Font = Enum.Font.GothamSemibold
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = dialog
+        
+        -- Dialog content
+        local content = Instance.new("TextLabel")
+        content.Name = "Content"
+        content.Size = UDim2.new(1, -20, 0, 0)
+        content.Position = UDim2.fromOffset(10, 40)
+        content.BackgroundTransparency = 1
+        content.Text = config.Content or ""
+        content.TextColor3 = Color3.fromRGB(230, 230, 230)
+        content.TextSize = 14
+        content.Font = Enum.Font.Gotham
+        content.TextXAlignment = Enum.TextXAlignment.Left
+        content.TextYAlignment = Enum.TextYAlignment.Top
+        content.TextWrapped = true
+        content.AutomaticSize = Enum.AutomaticSize.Y
+        content.Parent = dialog
+        
+        -- Buttons container
+        local buttonsContainer = Instance.new("Frame")
+        buttonsContainer.Name = "ButtonsContainer"
+        buttonsContainer.Size = UDim2.new(1, -20, 0, 35)
+        buttonsContainer.Position = UDim2.new(0, 10, 1, -45)
+        buttonsContainer.BackgroundTransparency = 1
+        buttonsContainer.Parent = dialog
+        
+        local buttonsLayout = Instance.new("UIListLayout")
+        buttonsLayout.Padding = UDim.new(0, 10)
+        buttonsLayout.FillDirection = Enum.FillDirection.Horizontal
+        buttonsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        buttonsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        buttonsLayout.Parent = buttonsContainer
+        
+        -- Add buttons
+        if config.Buttons and #config.Buttons > 0 then
+            for i, buttonConfig in ipairs(config.Buttons) do
+                local button = Instance.new("TextButton")
+                button.Name = "Button_" .. (buttonConfig.Title or "Button")
+                button.Size = UDim2.new(0, 100, 0, 30)
+                button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                button.BorderSizePixel = 0
+                button.Text = buttonConfig.Title or "Button"
+                button.TextColor3 = Color3.fromRGB(255, 255, 255)
+                button.TextSize = 14
+                button.Font = Enum.Font.GothamSemibold
+                button.Parent = buttonsContainer
+                
+                local buttonCorner = Instance.new("UICorner")
+                buttonCorner.CornerRadius = UDim.new(0, 4)
+                buttonCorner.Parent = button
+                
+                -- Connect callback
+                button.MouseButton1Click:Connect(function()
+                    dialogBg:Destroy()
+                    if buttonConfig.Callback then
+                        buttonConfig.Callback()
+                    end
+                end)
+                
+                -- Hover effect
+                button.MouseEnter:Connect(function()
+                    button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+                end)
+                
+                button.MouseLeave:Connect(function()
+                    button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                end)
+            end
+        else
+            -- Default close button
+            local closeButton = Instance.new("TextButton")
+            closeButton.Name = "CloseButton"
+            closeButton.Size = UDim2.new(0, 100, 0, 30)
+            closeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            closeButton.BorderSizePixel = 0
+            closeButton.Text = "Close"
+            closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            closeButton.TextSize = 14
+            closeButton.Font = Enum.Font.GothamSemibold
+            closeButton.Parent = buttonsContainer
+            
+            local buttonCorner = Instance.new("UICorner")
+            buttonCorner.CornerRadius = UDim.new(0, 4)
+            buttonCorner.Parent = closeButton
+            
+            closeButton.MouseButton1Click:Connect(function()
+                dialogBg:Destroy()
+            end)
+            
+            closeButton.MouseEnter:Connect(function()
+                closeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+            end)
+            
+            closeButton.MouseLeave:Connect(function()
+                closeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            end)
+        end
+        
+        -- Resize dialog based on content
+        content:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            local requiredHeight = content.AbsoluteSize.Y + 100
+            dialog.Size = UDim2.fromOffset(300, math.max(150, requiredHeight))
+        end)
+        
+        return dialog
+    end
+    
+    return window
 end
 
--- Toggle transparency effects
-function Celestial.ToggleTransparency(_, enabled)
-    if Celestial.Window then
-        Celestial.Window.AcrylicPaint.Frame.Background.BackgroundTransparency = enabled and 0.35 or 0
+-- Add a notification system
+function Celestial:Notify(options)
+    options = options or {}
+    options.Title = options.Title or "Notification"
+    options.Content = options.Content or ""
+    options.Duration = options.Duration or 5
+    
+    -- Create notification container if it doesn't exist
+    if not self.NotificationContainer then
+        self.NotificationContainer = Instance.new("Frame")
+        self.NotificationContainer.Name = "NotificationContainer"
+        self.NotificationContainer.Size = UDim2.new(0, 300, 1, 0)
+        self.NotificationContainer.Position = UDim2.new(1, -310, 0, 0)
+        self.NotificationContainer.BackgroundTransparency = 1
+        self.NotificationContainer.Parent = self.GUI
+        
+        local listLayout = Instance.new("UIListLayout")
+        listLayout.Padding = UDim.new(0, 10)
+        listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        listLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+        listLayout.Parent = self.NotificationContainer
+        
+        local padding = Instance.new("UIPadding")
+        padding.PaddingBottom = UDim.new(0, 10)
+        padding.Parent = self.NotificationContainer
+    end
+    
+    -- Create notification
+    local notification = Instance.new("Frame")
+    notification.Name = "Notification"
+    notification.Size = UDim2.new(1, -20, 0, 0)
+    notification.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    notification.BorderSizePixel = 0
+    notification.AutomaticSize = Enum.AutomaticSize.Y
+    notification.Parent = self.NotificationContainer
+    
+    local notifCorner = Instance.new("UICorner")
+    notifCorner.CornerRadius = UDim.new(0, 8)
+    notifCorner.Parent = notification
+    
+    -- Notification title
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(1, -20, 0, 24)
+    title.Position = UDim2.fromOffset(10, 10)
+    title.BackgroundTransparency = 1
+    title.Text = options.Title
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 16
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = notification
+    
+    -- Notification content
+    local content = Instance.new("TextLabel")
+    content.Name = "Content"
+    content.Size = UDim2.new(1, -20, 0, 0)
+    content.Position = UDim2.fromOffset(10, 34)
+    content.BackgroundTransparency = 1
+    content.Text = options.Content
+    content.TextColor3 = Color3.fromRGB(220, 220, 220)
+    content.TextSize = 14
+    content.Font = Enum.Font.Gotham
+    content.TextXAlignment = Enum.TextXAlignment.Left
+    content.TextYAlignment = Enum.TextYAlignment.Top
+    content.TextWrapped = true
+    content.AutomaticSize = Enum.AutomaticSize.Y
+    content.Parent = notification
+    
+    -- Add sub-content if provided
+    if options.SubContent and options.SubContent ~= "" then
+        local subContent = Instance.new("TextLabel")
+        subContent.Name = "SubContent"
+        subContent.Size = UDim2.new(1, -20, 0, 0)
+        subContent.Position = UDim2.new(0, 10, 0, content.AbsolutePosition.Y + content.AbsoluteSize.Y + 5)
+        subContent.BackgroundTransparency = 1
+        subContent.Text = options.SubContent
+        subContent.TextColor3 = Color3.fromRGB(180, 180, 180)
+        subContent.TextSize = 12
+        subContent.Font = Enum.Font.Gotham
+        subContent.TextXAlignment = Enum.TextXAlignment.Left
+        subContent.TextYAlignment = Enum.TextYAlignment.Top
+        subContent.TextWrapped = true
+        subContent.AutomaticSize = Enum.AutomaticSize.Y
+        subContent.Parent = notification
+        
+        -- Connect size change
+        content:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            subContent.Position = UDim2.new(0, 10, 0, 34 + content.AbsoluteSize.Y + 5)
+        end)
+    end
+    
+    -- Add bottom padding
+    local padding = Instance.new("Frame")
+    padding.Name = "BottomPadding"
+    padding.Size = UDim2.new(1, 0, 0, 10)
+    padding.BackgroundTransparency = 1
+    padding.Position = UDim2.new(0, 0, 1, 0)
+    padding.AnchorPoint = Vector2.new(0, 0)
+    padding.Parent = notification
+    
+    -- Auto-close
+    if options.Duration then
+        task.delay(options.Duration, function()
+            -- Fade out animation
+            for i = 0, 10 do
+                notification.BackgroundTransparency = i/10
+                for _, child in ipairs(notification:GetChildren()) do
+                    if child:IsA("TextLabel") then
+                        child.TextTransparency = i/10
+                    end
+                end
+                task.wait(0.02)
+            end
+            notification:Destroy()
+        end)
+    end
+    
+    -- Initial slide-in animation
+    notification.Position = UDim2.new(1, 0, 0, 0)
+    for i = 10, 0, -1 do
+        notification.Position = UDim2.new(i/10, 0, 0, 0)
+        task.wait(0.02)
+    end
+    
+    return notification
+end
+
+-- Destroy the UI library
+function Celestial:Destroy()
+    if self.GUI then
+        self.GUI:Destroy()
+        self.Unloaded = true
     end
 end
 
--- Display a notification
-function Celestial.Notify(_, options)
-    return Components.Notification:New(options)
+-- Set the UI theme (simplified for this example)
+function Celestial:SetTheme(themeName)
+    if table.find(self.Themes, themeName) then
+        self.Theme = themeName
+        -- You would implement theme color changes here
+    end
 end
 
--- Make the library accessible globally if in a supported environment
-if getgenv then
-    getgenv().Celestial = Celestial
+-- Toggle acrylic effect (simplified)
+function Celestial:ToggleAcrylic(enabled)
+    self.Acrylic = enabled
+    -- Would implement actual acrylic effect
 end
+
+-- Toggle transparency
+function Celestial:ToggleTransparency(enabled)
+    self.Transparency = enabled
+    -- Would implement transparency changes
+end
+
+-- Make the library accessible globally
+if getgenv then
+    getgenv().CelestialUI = Celestial
+end
+
+-- Example usage
+local window = Celestial:CreateWindow({
+    Title = "Celestial Demo",
+    SubTitle = "v1.0.0",
+    Size = UDim2.fromOffset(600, 400)
+})
+
+-- Create tabs with our working AddTab method
+local homeTab = window:AddTab({
+    Title = "Home"
+})
+
+local settingsTab = window:AddTab({
+    Title = "Settings"
+})
+
+-- Add sections and elements
+local mainSection = homeTab:AddSection("Main")
+
+mainSection:AddButton({
+    Title = "Click Me",
+    Description = "This is a button",
+    Callback = function()
+        Celestial:Notify({
+            Title = "Button Clicked",
+            Content = "You clicked the button!",
+            Duration = 3
+        })
+    end
+})
+
+mainSection:AddToggle({
+    Title = "Toggle Feature",
+    Description = "This is a toggle",
+    Default = false,
+    Callback = function(value)
+        print("Toggle value:", value)
+    end
+})
+
+mainSection:AddParagraph({
+    Title = "Information",
+    Content = "This is a paragraph with some information about the Celestial UI Library."
+})
+
+-- Add to settings tab
+local settingsSection = settingsTab:AddSection("Settings")
+
+settingsSection:AddButton({
+    Title = "Destroy UI",
+    Description = "Completely removes the UI",
+    Callback = function()
+        Celestial:Destroy()
+    end
+})
+
+-- Show a welcome notification
+Celestial:Notify({
+    Title = "Celestial UI",
+    Content = "Welcome to the Celestial UI Library",
+    SubContent = "UI has been successfully initialized",
+    Duration = 5
+})
 
 return Celestial
