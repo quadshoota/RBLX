@@ -25,12 +25,10 @@ if (not isfile('Lunor_Trans.png')) then
     writefile("Lunor_Trans.png", game:HttpGet('https://github.com/Catto-YFCN/Lunor_Dependencies/blob/main/Lunor_Trans.png?raw=true'))
 end
 
-if getgenv().dungeon == true then
-    Config.Dungeon.AutoDungeon = true
-    Config.Fighting.AutoStartDungeon = true
-    Config.Fighting.AutoPosition = true
-    Config.Fighting.InstantKill = true
+if getgenv().scriptRunThisSession then
+    return
 end
+getgenv().scriptRunThisSession = true
 
 local utils =
 {
@@ -849,32 +847,11 @@ local Features =
             if (getgenv().AllowQueueOnTeleport ~= false) then
                 local queue = queue_on_teleport or queueonteleport
                 if (queue) then
-                    local key = script_key or ""
-                    local queueCode = [[
-                        -- This block runs when teleported to a new server
-                        print("=== TELEPORT TEST EXECUTION ===")
-                        print("This should only appear ONCE per server join")
-                        
-                        if getgenv().executionCounter == nil then
-                            getgenv().executionCounter = 1
-                            print("First execution after teleport")
-                        else
-                            getgenv().executionCounter = getgenv().executionCounter + 1
-                            print("Multiple executions detected! Count: " .. getgenv().executionCounter)
-                        end
-                        
-                        if not game:IsLoaded() then
-                            game.Loaded:Wait()
-                        end
-                        
-                        getgenv().dungeon = true
-                        script_key = "]] .. key .. [["
-                        
-                        -- Simple test script that won't interfere with your main script
+                    -- Very simple queue code that will only run the script once
+                    queue([[
+                        -- The script will automatically not run again because of the check at the top
                         loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/UILIB.lua"))()
-                    ]]
-                    
-                    queue(queueCode)
+                    ]])
                 end
             end
         end,
