@@ -25,8 +25,11 @@ if (not isfile('Lunor_Trans.png')) then
     writefile("Lunor_Trans.png", game:HttpGet('https://github.com/Catto-YFCN/Lunor_Dependencies/blob/main/Lunor_Trans.png?raw=true'))
 end
 
-if getgenv().sessionInitialized == nil then
-    getgenv().sessionInitialized = true
+if getgenv().dungeon == true then
+    Config.Dungeon.AutoDungeon = true
+    Config.Fighting.AutoStartDungeon = true
+    Config.Fighting.AutoPosition = true
+    Config.Fighting.InstantKill = true
 end
 
 local utils =
@@ -848,9 +851,16 @@ local Features =
                 if (queue) then
                     local key = script_key or ""
                     local queueCode = [[
-                        if getgenv().sessionInitialized == nil then
-                            getgenv().sessionInitialized = true
-                            print("TEST: New session initialized")
+                        -- This block runs when teleported to a new server
+                        print("=== TELEPORT TEST EXECUTION ===")
+                        print("This should only appear ONCE per server join")
+                        
+                        if getgenv().executionCounter == nil then
+                            getgenv().executionCounter = 1
+                            print("First execution after teleport")
+                        else
+                            getgenv().executionCounter = getgenv().executionCounter + 1
+                            print("Multiple executions detected! Count: " .. getgenv().executionCounter)
                         end
                         
                         if not game:IsLoaded() then
@@ -860,6 +870,7 @@ local Features =
                         getgenv().dungeon = true
                         script_key = "]] .. key .. [["
                         
+                        -- Simple test script that won't interfere with your main script
                         loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/UILIB.lua"))()
                     ]]
                     
