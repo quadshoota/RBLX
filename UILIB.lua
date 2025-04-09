@@ -866,7 +866,7 @@ local Features =
                  --   else
                   --      queue(queueCode .. "loadstring(game:HttpGet('https://raw.githubusercontent.com/Catto-YFCN/Lunor_Dependencies/refs/heads/main/Games'))()")
 
-                        loadstring(game:GetHttp("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/UILIB.lua"))()
+                        loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/UILIB.lua"))()
                     --end
                 end
             end
