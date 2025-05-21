@@ -1,9 +1,1 @@
-local OldServerList =
-{
-    ["202f9eb0-2c37-4464-8568-0b92a4333053"] = 
-    {
-        ["Version"] = 1224,
-    },
-}
-
-return OldServerList
+return {["202f9eb0-2c37-4464-8568-0b92a4333053"]={["Version"]=1224,},["c95fa9e6-2b61-4a06-9228-6e3e264256a4"]={["Version"]=1247,["JobID"]="c95fa9e6-2b61-4a06-9228-6e3e264256a4",},}
