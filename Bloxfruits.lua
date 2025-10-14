@@ -389,7 +389,7 @@ local HitSoundLibrary =
 
     PlayHitSound = function(self, SoundParent, Volume)
         if self.SoundAssetId == 'SoundNotLoaded' then
-            Library:Notification("PERCEPTION » Missing dependencies.", 3, "warning")
+            Library:Notification("LUNOR » Missing dependencies.", 3, "warning")
             return
         end
 
@@ -419,6 +419,7 @@ local placeevent = game:GetService("ReplicatedStorage").Remotes.PlaceItem
 local useitemevent = game:GetService("ReplicatedStorage").Remotes.UseItem
 local packevent = game:GetService("ReplicatedStorage").Remotes.OpenHeldPack
 local equipitem = game:GetService("ReplicatedStorage").Remotes.EquipItem
+local eggremote = game:GetService("ReplicatedStorage").Remotes.OpenEgg
 
 local DesyncLibrary = 
 {
@@ -567,7 +568,7 @@ local Dependencies =
 
 Dependencies:CreateDirectories()
 Library:Window({
-    Name = "PERCEPTION",
+    Name = "LUNOR",
     Key = "LunacyWindowsDetectionBoss7261",
     Logo = Dependencies:CustomAsset("infernothree"),
 })
@@ -970,12 +971,12 @@ local Utils =
         return nil
     end,
 
-    EquipTool = function(self, boolean)
+    EquipTool = function(self, boolean, force)
         local tool = self:ReturnTool()
-        if (not tool and boolean) then return end
+        if (not tool and not force) then return end
 
         -- game.Players.LocalPlayer:FindFirstChild("Basic Bat")
-        if (boolean == false and lcl.Character:FindFirstChildOfClass("Tool")) then
+        if (boolean == false and lcl.Character:FindFirstChildOfClass("Tool") or boolean == true and lcl.Character:FindFirstChildOfClass("Tool") and lcl.Character:FindFirstChildOfClass("Tool") ~= tool) then
             humanoid:UnequipTools()
             return
         elseif (boolean == true and not lcl.Character:FindFirstChildOfClass("Tool")) then
@@ -1343,6 +1344,12 @@ local Subsections =
         Side = "Right",
     }),
 
+    -- Eggs
+    Eggs = Sections.Items:Subsection({
+        Name = "Eggs",
+        Side = "Right",
+    }),
+
 }
 
 
@@ -1361,6 +1368,7 @@ local Config =
         AutoPurchaseSeedsConnection = nil,
         AutoPurchaseGearsConnection = nil,
         AutoOpenCardsConnection = nil,
+        AutoCombatConnection = nil,
     },
 
     Cooldowns =
@@ -1386,6 +1394,8 @@ local Config =
         ThrowProjectileEvery = 2,
         LastOpenedCard = 0,
         OpenCardEvery = 1.5,
+        LastOpenedEgg = 0,
+        OpenEggsEvery = 8,
     },
 
     Farm =
@@ -1468,7 +1478,7 @@ local Config =
 
         InstantOpenCards = false,
         AutoOpenCards = false,
-
+        AutoOpenEggs = false,
 
         FuseList = {},
         SelectedFuses = "Unknown",
@@ -1503,6 +1513,7 @@ local Features =
         end,
 
         TeleportEntity = function(self)
+            if (not Config.Connections.AutoCombatConnection) then return end
             local target = self:GetEntityByPriority()
             if (target == nil) then return end
 
@@ -1513,6 +1524,8 @@ local Features =
         end,
 
         AttackEntity = function(self)
+            if (not Config.Connections.AutoCombatConnection) then return end
+
             local target = self:GetEntityByPriority()
             if target == nil then
                 return
@@ -1535,7 +1548,7 @@ local Features =
             end
 
             if (Config.UserInterface.ShowEffects) then
-                local hitMarkers = { '$', '.GG/PCN', 'USE', 'PERCEPTION.DEV', "H$"}
+                local hitMarkers = { '$', '.GG/PCN', 'USE', 'LUNOR.DEV', "H$"}
                 VisualEffects:CreateHitTracer(game:GetService('Players').LocalPlayer.Character.HumanoidRootPart.Position, target.PrimaryPart.Position)
                 VisualEffects:CreateHitEffectColored(target, hitMarkers[math.random(1, #hitMarkers)], Color3.fromRGB(math.random(0, 1) * 255, math.random(0, 1) * 255, math.random(0, 1) * 255), Color3.new(0, 0, 0))
             end
@@ -1775,7 +1788,7 @@ local Features =
             if (self.Cache.LastNotifiedSell == nil or tick() - self.Cache.LastNotifiedSell >= 5) then
                 self.Cache.LastNotifiedSell = tick()
                 if (Config.Favorites.AutoFavorite) then
-                    Library:Notification("PERCEPTION » Auto-favorited items", 3, "success")
+                    Library:Notification("LUNOR » Auto-favorited items", 3, "success")
                 end
             end
 
@@ -1817,8 +1830,8 @@ local Features =
 
         AutoCollectAndEquip = function(self)
             equipbest:Fire()
-            Library:Notification("PERCEPTION » Equipped Brainrots", 3, "success")
-            Library:Notification("PERCEPTION » Collected Money", 3, "success")
+            Library:Notification("LUNOR » Equipped Brainrots", 3, "success")
+            Library:Notification("LUNOR » Collected Money", 3, "success")
         end,
 
         AutoClaimEvent = function(self)
@@ -1827,24 +1840,17 @@ local Features =
             local proxim = workspace.ScriptedMap.Event.EventRewards.TalkPart:FindFirstChild("ProximityPrompt")
             if (not proxim) then return end
 
-            if (Config.Connections.AutoCombatConnection) then
-                Config.Connections.AutoCombatConnection:Disconnect()
-                Config.Connections.AutoCombatConnection = nil
-                DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
-                task.wait()
-                DesyncLibrary.ShouldDesync = false
-                Utils:EquipTool(false)
-            end
+            if (Config.Farm.AutoCombat) then Restores:RestoreCombatConn() end
 
             DesyncLibrary.ShouldDesync = true
             DesyncLibrary.DesyncPosition = proxim.Parent.CFrame
-            --game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = proxim.Parent.CFrame
             task.wait(0.15)
             fireproximityprompt(proxim)
             DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
             DesyncLibrary.ShouldDesync = false
-            Library:Notification("PERCEPTION » Claimed Rewards", 3, "success")
-            Restores:RestoreCombatConn()
+            Library:Notification("LUNOR » Claimed Rewards", 3, "success")
+
+            if (Config.Farm.AutoCombat) then Restores:RestoreCombatConn() end
         end,
     },
 
@@ -1888,7 +1894,7 @@ local Features =
             if (not cannotify) then return end
             if (self.Cache.LastSeedsNotification == nil or tick() - self.Cache.LastSeedsNotification >= 5) then
                 self.Cache.LastSeedsNotification = tick()
-                Library:Notification("PERCEPTION » Purchased Seeds", 3, "success")
+                Library:Notification("LUNOR » Purchased Seeds", 3, "success")
             end
         end,
 
@@ -1924,7 +1930,7 @@ local Features =
             if (not cannotify) then return end
             if (self.Cache.LastGearsNotification == nil or tick() - self.Cache.LastGearsNotification >= 5) then
                 self.Cache.LastGearsNotification = tick()
-                Library:Notification("PERCEPTION » Purchased Gears", 3, "success")
+                Library:Notification("LUNOR » Purchased Gears", 3, "success")
             end
         end,
     },
@@ -1950,12 +1956,8 @@ local Features =
             local backpack = game.Players.LocalPlayer:FindFirstChild("Backpack")
             local usedTools = {}
 
-            if (Config.Connections.AutoCombatConnection) then
-                Config.Connections.AutoCombatConnection:Disconnect()
-                Config.Connections.AutoCombatConnection = nil
-            end
-
-            Utils:EquipTool(false)
+            if (Config.Farm.AutoCombat) then Restores:RestoreCombatConn() end
+            Utils:EquipTool(false, true)
             task.wait(0.1)
             DesyncLibrary.ShouldDesync = true
             DesyncLibrary.DesyncPosition = rayOrigin.CFrame
@@ -1979,9 +1981,9 @@ local Features =
             end
 
             task.wait(0.1)
-            Restores:RestoreCombatConn()
-            Utils:EquipTool(false)
+            Utils:EquipTool(false, true)
             DesyncLibrary.ShouldDesync = false
+            if (Config.Farm.AutoCombat) then Restores:RestoreCombatConn() end
             if (#usedTools <= 0) then return end
             Library:Notification("PROJECTILE » " .. table.concat(usedTools, " | "), 3, "warning")
         end,
@@ -1998,6 +2000,89 @@ local Features =
             end
 
             packevent:FireServer()
+        end,
+
+        EggFunc = nil,
+        SkipEggs = function(self)
+            if (self.EggFunc) then return end
+            local gc_objects = getgc(true)
+            for i,v in pairs(gc_objects) do
+                if (type(v) == "function" and islclosure(v)) then
+                    local consts = getconstants(v)
+                    for idx, val in pairs(consts) do
+                        if (type(val) == "string" and string.find(val, "EggOpening")) then
+                            local info = getinfo(v)
+                            if (info.source and string.find(info.source, "Shop")) then
+                                self.EggFunc = v
+                                hookfunction(v, newcclosure(function(p54)
+                                    return
+                                end))
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end,
+
+        AutoEggOpening = function(self)
+            local backpack = game.Players.LocalPlayer:FindFirstChild("Backpack")
+            local equipped = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool")
+
+            if (Config.Farm.AutoCombat) then 
+                Restores:RestoreCombatConn() 
+            end
+
+            if (equipped and not string.find(equipped.Name, "Egg") or equipped and string.find(equipped.Name, "Eggplant")) then
+                Utils:EquipTool(false, true)
+                equipped = nil
+                task.wait()
+            end
+
+            if (equipped and equipped:GetAttribute("ItemName")) then
+                local itemname = equipped:GetAttribute("ItemName") or nil
+                if (itemname and string.find(itemname, "Egg") and not string.find(itemname, "Eggplant")) then
+                    task.wait(0.1)
+                    eggremote:FireServer()
+                    task.wait(0.1)
+                    Utils:EquipTool(false, true)
+                    if (Config.Farm.AutoCombat) then Restores:RestoreCombatConn() end
+                    Library:Notification("EGGS » Opening " .. tostring(itemname or "Unknown"), 3, "success")
+                    return true
+                end
+            end
+
+            if (not equipped or equipped == nil) then
+                for i,v in pairs(backpack:GetChildren()) do
+                    if (not v or v and not v:GetAttribute("ItemName")) then continue end
+                    if (v and v:GetAttribute("ItemName") and string.find(v:GetAttribute("ItemName"), "Egg") and not string.find(v:GetAttribute("ItemName"), "Eggplant")) then
+                        if (Config.Cooldowns.OpenEggsEvery == 15 or self.EggFunc == nil) then
+                            self:SkipEggs()
+                            Config.Cooldowns.OpenEggsEvery = 8
+                        end
+
+                        v.Parent = game.Players.LocalPlayer.Character
+                        task.wait(0.1)
+                        eggremote:FireServer()
+                        task.wait(0.1)
+                        Utils:EquipTool(false, true)
+                        if (Config.Farm.AutoCombat) then Restores:RestoreCombatConn() end
+                        Library:Notification("EGGS » Opening " .. tostring(v:GetAttribute("ItemName") or "Unknown"), 3, "success")
+                        return true
+                    end
+                end
+            end
+
+            if (Config.Farm.AutoCombat) then Restores:RestoreCombatConn() end
+
+            -- couldnt find any eggs, set cooldown upto 15 + restore.
+            Library:Notification("EGGS » Waiting for eggs..", 3, "info")
+            if (self.EggFunc) then
+                restorefunction(self.EggFunc)
+                self.EggFunc = nil
+                Config.Cooldowns.OpenEggsEvery = 15
+                return false
+            end
         end,
     },
 }
@@ -2648,6 +2733,38 @@ Subsections.Cards:Toggle({
     end,
 })
 
+-- autoopeneggs
+Subsections.Eggs:Toggle({
+    Name = "Auto Eggs",
+    Flag = "AutoOpenEggs",
+    Default = Config.Items.AutoOpenEggs,
+    Callback = function(value)
+        Config.Items.AutoOpenEggs = value
+        Config.Cooldowns.LastOpenedEgg = nil
+        if (value) then
+            if (not Config.Connections.AutoOpenEggsConnection) then
+                Features.Items:SkipEggs()
+                Config.Connections.AutoOpenEggsConnection = Services.RunService.Heartbeat:Connect(function()
+                    local currentTime = tick()
+                    if (Config.Cooldowns.LastOpenedEgg == nil or currentTime - Config.Cooldowns.LastOpenedEgg >= Config.Cooldowns.OpenEggsEvery) then
+                        Config.Cooldowns.LastOpenedEgg = currentTime
+                        Features.Items:AutoEggOpening()
+                    end
+                end)
+            end
+        else
+            if (Config.Connections.AutoOpenEggsConnection) then
+                Config.Connections.AutoOpenEggsConnection:Disconnect()
+                Config.Connections.AutoOpenEggsConnection = nil
+                if (Features.Items.EggFunc ~= nil) then
+                    restorefunction(Features.Items.EggFunc)
+                    Features.Items.EggFunc = nil
+                end
+            end
+        end
+    end,
+})
+
 
 -- fuses
 local fusepara = Sections.Fuses:List({
@@ -2859,7 +2976,7 @@ local ConfigsModule =
         end
         
         --print(message)
-        Library:Notification("PERCEPTION » " .. message, 3, success and "success" or "error")
+        Library:Notification("LUNOR » " .. message, 3, success and "success" or "error")
         return success, message
     end,
 }
@@ -2964,19 +3081,17 @@ Services.RunService.Heartbeat:Connect(function()
     runtime:handle()
 end)
 
-Library:Notification("PERCEPTION » Successfully initialized", 3, "success")
+Library:Notification("LUNOR » Successfully initialized", 3, "success")
 
 Restores =
 {
     RestoreCombatConn = function(self)
-        if (not Config.Farm.AutoCombat) then
-            if (Config.Connections.AutoCombatConnection) then
-                Config.Connections.AutoCombatConnection:Disconnect()
-                Config.Connections.AutoCombatConnection = nil
-                DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
-                task.wait()
-                DesyncLibrary.ShouldDesync = false
-            end
+        if (not Config.Farm.AutoCombat and Config.Connections.AutoCombatConnection) then
+            Config.Connections.AutoCombatConnection:Disconnect()
+            Config.Connections.AutoCombatConnection = nil
+            DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
+            task.wait()
+            DesyncLibrary.ShouldDesync = false
             return
         end
 
@@ -2990,7 +3105,26 @@ Restores =
                     Features.Farm:TeleportEntity()
                 end
             end)
+            return
+        end
 
+        if (Config.Farm.AutoCombat and Config.Connections.AutoCombatConnection) then
+            Config.Connections.AutoCombatConnection:Disconnect()
+            Config.Connections.AutoCombatConnection = nil
+            DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
+            task.wait()
+            DesyncLibrary.ShouldDesync = false
+            return
+        elseif (not Config.Farm.AutoCombat and not Config.Connections.AutoCombatConnection) then
+            Config.Connections.AutoCombatConnection = Services.RunService.Heartbeat:Connect(function()
+                local currentTime = tick()
+                if (Config.Cooldowns.LastAttacked == nil or currentTime - Config.Cooldowns.LastAttacked >= Config.Cooldowns.AttackCooldown) then
+                    Config.Cooldowns.AttackCooldown = math.random(0.15, 0.23)
+                    Config.Cooldowns.LastAttacked = currentTime
+                    Features.Farm:AttackEntity()
+                    Features.Farm:TeleportEntity()
+                end
+            end)
             return
         end
     end,
