@@ -29,6 +29,7 @@ local Services =
     UserInputService = game:GetService("UserInputService"),
 }
 
+
 local Helpers =
 {
     FrameConnections =
@@ -71,7 +72,7 @@ local Helpers =
 
         Lighting.GlobalShadows = false
         Lighting.FogEnd = math.huge
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level04
 
         local monit = workspace
         self.FrameConnections.Hiteffects = monit.ChildAdded:Connect(function(child)
