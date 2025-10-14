@@ -72,7 +72,7 @@ local Helpers =
 
         Lighting.GlobalShadows = false
         Lighting.FogEnd = math.huge
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Level04
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level05
 
         local monit = workspace
         self.FrameConnections.Hiteffects = monit.ChildAdded:Connect(function(child)
