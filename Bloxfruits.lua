@@ -2948,3 +2948,7 @@ Services.RunService.Heartbeat:Connect(function()
 end)
 
 Library:Notification("PERCEPTION » Successfully initialized", 3, "success")
+
+if (Config.Settings.Lowgraphics) then
+    Helpers:BoostFrames()
+end
