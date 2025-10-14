@@ -42,6 +42,7 @@ local Helpers =
         Storage = {},
     },
 
+
     BoostFrames = function(self)
         for _, obj in pairs(Workspace:GetDescendants()) do
             if (obj:IsA("BasePart")) then
@@ -971,7 +972,7 @@ local Utils =
 
     EquipTool = function(self, boolean)
         local tool = self:ReturnTool()
-        if (not tool) then return end
+        if (not tool and boolean) then return end
 
         -- game.Players.LocalPlayer:FindFirstChild("Basic Bat")
         if (boolean == false and lcl.Character:FindFirstChildOfClass("Tool")) then
@@ -1479,6 +1480,7 @@ for i,v in pairs(Globals.FuseCombinations) do
     table.insert(Config.Items.FuseList, v.Result)
 end
 
+
 local Features =
 {
     Farm =
@@ -1824,6 +1826,16 @@ local Features =
             if (not path or path and path.Visible == false) then return end
             local proxim = workspace.ScriptedMap.Event.EventRewards.TalkPart:FindFirstChild("ProximityPrompt")
             if (not proxim) then return end
+
+            if (Config.Connections.AutoCombatConnection) then
+                Config.Connections.AutoCombatConnection:Disconnect()
+                Config.Connections.AutoCombatConnection = nil
+                DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
+                task.wait()
+                DesyncLibrary.ShouldDesync = false
+                Utils:EquipTool(false)
+            end
+
             DesyncLibrary.ShouldDesync = true
             DesyncLibrary.DesyncPosition = proxim.Parent.CFrame
             --game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = proxim.Parent.CFrame
@@ -1832,6 +1844,7 @@ local Features =
             DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
             DesyncLibrary.ShouldDesync = false
             Library:Notification("PERCEPTION » Claimed Rewards", 3, "success")
+            Restores:RestoreCombatConn()
         end,
     },
 
@@ -1931,21 +1944,30 @@ local Features =
             
             local rayOrigin = target:FindFirstChild("BrainrotHitbox") or target:FindFirstChild("Hitbox")
             if (not rayOrigin) then return end
-            
-            DesyncLibrary.ShouldDesync = true
-            DesyncLibrary.DesyncPosition = rayOrigin.CFrame
-            
+        
             repeat task.wait() until target:GetAttribute("Speed") > 0 or (not Config.Items.AutoProjectiles)
             
             local backpack = game.Players.LocalPlayer:FindFirstChild("Backpack")
             local usedTools = {}
-            
+
+            if (Config.Connections.AutoCombatConnection) then
+                Config.Connections.AutoCombatConnection:Disconnect()
+                Config.Connections.AutoCombatConnection = nil
+            end
+
+            Utils:EquipTool(false)
+            task.wait(0.1)
+            DesyncLibrary.ShouldDesync = true
+            DesyncLibrary.DesyncPosition = rayOrigin.CFrame
             for i, v in pairs(backpack:GetChildren()) do
                 if (not v:GetAttribute("Name")) then continue end
                 if (v:IsA("Tool") and Utils:Contains(Config.Items.SelectedProjectiles, v:GetAttribute("Name"))) then
                     v.Parent = game.Players.LocalPlayer.Character
                     table.insert(usedTools, v:GetAttribute("Name"))
-                    task.wait()
+                    
+                    task.wait(0.1)
+                    DesyncLibrary.DesyncPosition = rayOrigin.CFrame
+
                     useitemevent:FireServer({
                         Toggle = true,
                         Tool = game.Players.LocalPlayer.Character:FindFirstChild(v.Name),
@@ -1955,17 +1977,12 @@ local Features =
                 end
                 task.wait()
             end
-            
+
             task.wait(0.1)
-            
-            if (#usedTools == 0) then
-                DesyncLibrary.ShouldDesync = false
-                Utils:EquipTool(false)
-                return
-            end
-            
+            Restores:RestoreCombatConn()
             Utils:EquipTool(false)
             DesyncLibrary.ShouldDesync = false
+            if (#usedTools <= 0) then return end
             Library:Notification("PROJECTILE » " .. table.concat(usedTools, " | "), 3, "warning")
         end,
 
@@ -1999,8 +2016,8 @@ Subsections.Combat:Toggle({
                         Config.Cooldowns.AttackCooldown = math.random(0.15, 0.23)
                         Config.Cooldowns.LastAttacked = currentTime
                         Features.Farm:AttackEntity()
+                        Features.Farm:TeleportEntity()
                     end
-                    Features.Farm:TeleportEntity()
                 end)
             end
         else
@@ -2900,7 +2917,7 @@ local runtime =
     cooldowns =
     {
         lastupdate = 0,
-        updateevery = 3,
+        updateevery = 7,
     },
 
     handle = function(self)
@@ -2949,6 +2966,33 @@ end)
 
 Library:Notification("PERCEPTION » Successfully initialized", 3, "success")
 
-if (Config.Settings.Lowgraphics) then
-    Helpers:BoostFrames()
-end
+Restores =
+{
+    RestoreCombatConn = function(self)
+        if (not Config.Farm.AutoCombat) then
+            if (Config.Connections.AutoCombatConnection) then
+                Config.Connections.AutoCombatConnection:Disconnect()
+                Config.Connections.AutoCombatConnection = nil
+                DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
+                task.wait()
+                DesyncLibrary.ShouldDesync = false
+            end
+            return
+        end
+
+        if (not Config.Connections.AutoCombatConnection and Config.Farm.AutoCombat) then
+            Config.Connections.AutoCombatConnection = Services.RunService.Heartbeat:Connect(function()
+                local currentTime = tick()
+                if (Config.Cooldowns.LastAttacked == nil or currentTime - Config.Cooldowns.LastAttacked >= Config.Cooldowns.AttackCooldown) then
+                    Config.Cooldowns.AttackCooldown = math.random(0.15, 0.23)
+                    Config.Cooldowns.LastAttacked = currentTime
+                    Features.Farm:AttackEntity()
+                    Features.Farm:TeleportEntity()
+                end
+            end)
+
+            return
+        end
+    end,
+}
+
