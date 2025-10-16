@@ -4477,11 +4477,11 @@ function Library.Window(self, Options)
 		local function updateCurrentText()
 			local chosenValue = Textbox.Value
 			if (not chosenValue or chosenValue == nil) then return end
+
             local displayText = tostring(chosenValue)
-                if (#displayText > 8) then
-                    textboxValue.Text = string.sub(displayText, 1, 8)
-                end
-            end
+			if (#displayText > 8) then
+				textboxValue.Text = string.sub(displayText, 1, 8)
+			end
         end
 
 		textboxValue.Focused:Connect(function()
