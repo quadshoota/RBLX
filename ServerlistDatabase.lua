@@ -566,6 +566,8 @@ function Library.Window(self, Options)
 		
 		if (isMobile) then
 			scaleFactor = scaleFactor * 0.9
+		else
+			scaleFactor = scaleFactor * 1.05
 		end
 		
 		local finalSize = originalSize * scaleFactor
@@ -696,8 +698,8 @@ function Library.Window(self, Options)
 			local deltaY = inputPos.Y - startPos.Y
 			
 			local viewport = workspace.CurrentCamera.ViewportSize
-			local minWidth = isMobile and math.max(185, viewport.X * 0.4) or 500
-			local minHeight = isMobile and math.max(65, viewport.Y * 0.3) or 350
+			local minWidth = isMobile and math.max(185, viewport.X * 0.4) or 550
+			local minHeight = isMobile and math.max(65, viewport.Y * 0.3) or 400
 			local maxWidth = isMobile and viewport.X * 0.98 or viewport.X * 0.9
 			local maxHeight = isMobile and viewport.Y * 0.95 or viewport.Y * 0.9
 			
@@ -874,7 +876,7 @@ function Library.Window(self, Options)
 		logoImage.BackgroundTransparency = 1
 		logoImage.ImageTransparency = 0.3 -- 70% visible
 		logoImage.Size = Library.UDim2(0, 25, 0, 25)
-		logoImage.Position = UDim2.fromScale(0.15, 0.5)
+		logoImage.Position = UDim2.fromScale(0.15, 0.55)
 		logoImage.AnchorPoint = Vector2.new(0, 0.5)
 		logoImage.Parent = titleContainer
 		
@@ -1104,25 +1106,8 @@ function Library.Window(self, Options)
 				end
 
 				UpdateOrientation(true)
-
-				-- Use Heartbeat connection instead of BindToRenderStep for Luarmor compatibility
-				local connection = RunService.Heartbeat:Connect(function()
-					if (Library.Open) then
-						UpdateOrientation()
-					else
-						connection:Disconnect()
-					end
-				end)
-				
-				-- Store connection for cleanup
-				binds[uid].connection = connection
 			else
 				for uid, bind in pairs(binds) do
-					-- Disconnect the Heartbeat connection instead of UnbindFromRenderStep
-					if (bind.connection) then
-						bind.connection:Disconnect()
-					end
-
 					for _, part in pairs(bind.parts) do
 						part.Transparency = 1
 					end
@@ -1153,7 +1138,6 @@ function Library.Window(self, Options)
 	--warn("Library")
 
 	Library:SetOpen(true)
-
 	local tabHolder = Instance.new("ScrollingFrame")	
 	tabHolder.Name = "TabHolder"
 	tabHolder.ScrollBarThickness = 0
@@ -2870,9 +2854,9 @@ function Library.Window(self, Options)
 		slidertextbox.BackgroundTransparency = 1
 		slidertextbox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		slidertextbox.BorderSizePixel = 0
-		slidertextbox.Position = UDim2.new(0.66, 0, 0.5, 0)
+		slidertextbox.Position = UDim2.new(1, 0, 0.5, 0)
 		slidertextbox.Selectable = false
-		slidertextbox.Size = Library.UDim2(0, 0, 1, 4)
+		slidertextbox.Size = Library.UDim2(0.5, 0, 1, 4)
 
 		local Sliding = false
 		local format = "%." .. Slider.Decimals .. "f"
@@ -4370,7 +4354,7 @@ function Library.Window(self, Options)
 		textox.BackgroundTransparency = 1
 		textox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		textox.BorderSizePixel = 0
-		textox.Size = Library.UDim2(1, 0, 0, 25)
+		textox.Size = Library.UDim2(1, 0, 0, 20)
 
 		local textboxname = Instance.new("TextLabel")		
 		textboxname.Name = "Textboxname"
@@ -4504,7 +4488,7 @@ function Library.Window(self, Options)
 
             local displayText = tostring(chosenValue)
 			if (#displayText > Library:ReturnMaxChars()) then
-				textboxValue.Text = string.sub(displayText, 1, Library:ReturnMaxChars())
+				textboxValue.Text = string.sub(displayText, 1, Library:ReturnMaxChars() - 2)
 			end
         end
 
@@ -5921,7 +5905,7 @@ function Sections.Image(self, Properties)
 	return Image
 end
 
-function Library.MobileButton(self)
+function Library.MobileButton(self, minimizelogo)
 	local menu = Instance.new("TextButton")		
 	menu.Name = "Menu"
 	menu.Text = ""
@@ -5931,7 +5915,7 @@ function Library.MobileButton(self)
 	menu.BackgroundTransparency = 0.07
 	menu.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	menu.BorderSizePixel = 0
-	menu.Position = UDim2.new(0.5, 0, 0, 20)
+	menu.Position = UDim2.new(0.5, 0, 0, 200)
 	menu.Selectable = false
 	menu.Size = UDim2.fromOffset(40, 40)
 	menu.Parent = Library.ScreenGUI
@@ -5988,17 +5972,16 @@ function Library.MobileButton(self)
 	uIPadding.PaddingRight = UDim.new(0, 12)
 	uIPadding.Parent = menu
 
-    local logo = Instance.new("ImageLabel")		
-	logo.Name = "logo"
-	logo.Image = "http://www.roblox.com/asset/?id=111169752816426"
-	logo.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	logo.BackgroundTransparency = 1
-	logo.BorderColor3 = Color3.fromRGB(0, 0, 0)
-	logo.BorderSizePixel = 0
-	--logo.Position = UDim2.fromScale(0.5, 0.5)
-	logo.Size = UDim2.fromScale(1, 1)
-	logo.Parent = menu
-
+    local logoImage = Instance.new("ImageLabel")		
+	logoImage.Name = "Logo"
+	logoImage.Image = minimizelogo
+	logoImage.BackgroundTransparency = 1
+	logoImage.ImageTransparency = 0.3 -- 70% visible
+	logoImage.Position = UDim2.fromScale(0.5, 0.5)
+	logoImage.Size = UDim2.fromOffset(30, 30)
+	logoImage.AnchorPoint = Vector2.new(0.5, 0.5)
+	logoImage.Parent = menu
+	
 	menu.MouseButton1Click:Connect(function()
 		Library:SetOpen(not Library.Open)
 	end)
