@@ -161,8 +161,8 @@ end
 
 function Library.ReturnMaxChars(self)
 	local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-	-- mobile max 6, desktop max 8
-	return isMobile and 6 or 8
+	-- mobile max 7, desktop max 11
+	return isMobile and 7 or 11
 end
 
 function Library.GetCharsFromTable(self, tbl)
@@ -2846,7 +2846,7 @@ function Library.Window(self, Options)
 		slidertextbox.Text = "50"
 		slidertextbox.TextColor3 = Color3.fromRGB(67, 67, 68)
 		slidertextbox.TextSize = Library.GetScaledTextSize(12)
-		slidertextbox.TextXAlignment = Enum.TextXAlignment.Center
+		slidertextbox.TextXAlignment = Enum.TextXAlignment.Right
 		slidertextbox.Active = false
 		slidertextbox.AnchorPoint = Vector2.new(1, 0.5)
 		slidertextbox.AutomaticSize = Enum.AutomaticSize.X
@@ -4483,13 +4483,17 @@ function Library.Window(self, Options)
 		end
 
 		local function updateCurrentText()
-			local chosenValue = Textbox.Value
+			local chosenValue = textboxValue.Text
 			if (not chosenValue or chosenValue == nil) then return end
 
-            local displayText = tostring(chosenValue)
+            local displayText = chosenValue
 			if (#displayText > Library:ReturnMaxChars()) then
-				textboxValue.Text = string.sub(displayText, 1, Library:ReturnMaxChars() - 2)
+				textboxValue.Text = string.sub(displayText, 1, Library:ReturnMaxChars())
+			else
+				textboxValue.Text = displayText
 			end
+
+			--warn("chosen: ", chosenValue .. " | display: ", displayText .. " | max: ", Library:ReturnMaxChars() .. " | amount: ", #displayText)
         end
 
 		textboxValue.Focused:Connect(function()
@@ -4523,8 +4527,8 @@ function Library.Window(self, Options)
 			}):Play()
 
 			Textbox.Value = textboxValue.Text
-			updateCurrentText()
 			Library.SetFlag(Textbox.Flag, Textbox.Value)
+			--updateCurrentText()
 		end)
 
 		textox.MouseEnter:Connect(function()
