@@ -159,6 +159,12 @@ function Library.Round(self, Number, Float)
 	return Float * math.floor(Number / Float)
 end
 
+function Library.ReturnMaxChars(self)
+	local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	-- mobile max 5, desktop max 8
+	return isMobile and 5 or 8
+end
+
 function Library.NextFlag()
 	Library.UnNamedFlags = Library.UnNamedFlags + 1
 	return string.format("%.14g", Library.UnNamedFlags)
@@ -3354,8 +3360,8 @@ function Library.Window(self, Options)
                 end
             else
                 local displayText = tostring(chosenValue)
-                if (#displayText > 11) then
-                    dropdownCurrenttext.Text = string.sub(displayText, 1, 8) .. "..."
+                if (#displayText > Library:ReturnMaxChars()) then
+                    dropdownCurrenttext.Text = string.sub(displayText, 1, Library:ReturnMaxChars()) .. "..."
                 else
                     dropdownCurrenttext.Text = displayText .. "..."
                 end
@@ -4479,8 +4485,8 @@ function Library.Window(self, Options)
 			if (not chosenValue or chosenValue == nil) then return end
 
             local displayText = tostring(chosenValue)
-			if (#displayText > 8) then
-				textboxValue.Text = string.sub(displayText, 1, 8)
+			if (#displayText > Library:ReturnMaxChars()) then
+				textboxValue.Text = string.sub(displayText, 1, Library:ReturnMaxChars())
 			end
         end
 
