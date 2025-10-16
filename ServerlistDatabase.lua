@@ -165,6 +165,14 @@ function Library.ReturnMaxChars(self)
 	return isMobile and 5 or 8
 end
 
+function Library.GetCharsFromTable(self, tbl)
+	local totalChars = 0
+	for _, str in pairs(tbl) do
+		totalChars = totalChars + #tostring(str)
+	end
+	return totalChars
+end
+
 function Library.NextFlag()
 	Library.UnNamedFlags = Library.UnNamedFlags + 1
 	return string.format("%.14g", Library.UnNamedFlags)
@@ -3351,7 +3359,7 @@ function Library.Window(self, Options)
                 if (#chosenValue == 0) then
                     dropdownCurrenttext.Text = "..."
                 else
-                    local fullText = table.concat(chosenValue, ", ")
+                    local fullText = Library:GetCharsFromTable(chosenValue)
                     if (#fullText > Library:ReturnMaxChars()) then
                         dropdownCurrenttext.Text = string.sub(fullText, 1, Library:ReturnMaxChars()) .. "..."
                     else
