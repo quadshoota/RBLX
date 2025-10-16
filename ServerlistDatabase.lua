@@ -167,6 +167,11 @@ end
 
 function Library.GetCharsFromTable(self, tbl)
 	local totalChars = 0
+	
+	if (not tbl or #tbl == 0) then
+		return totalChars
+	end
+
 	for _, str in pairs(tbl) do
 		totalChars = totalChars + #tostring(str)
 	end
@@ -686,8 +691,8 @@ function Library.Window(self, Options)
 			local deltaY = inputPos.Y - startPos.Y
 			
 			local viewport = workspace.CurrentCamera.ViewportSize
-			local minWidth = isMobile and math.max(150, viewport.X * 0.4) or 500
-			local minHeight = isMobile and math.max(50, viewport.Y * 0.3) or 350
+			local minWidth = isMobile and math.max(185, viewport.X * 0.4) or 500
+			local minHeight = isMobile and math.max(65, viewport.Y * 0.3) or 350
 			local maxWidth = isMobile and viewport.X * 0.98 or viewport.X * 0.9
 			local maxHeight = isMobile and viewport.Y * 0.95 or viewport.Y * 0.9
 			
