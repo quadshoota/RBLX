@@ -672,10 +672,10 @@ function Library.Window(self, Options)
 			local deltaY = inputPos.Y - startPos.Y
 			
 			local viewport = workspace.CurrentCamera.ViewportSize
-			local minWidth = 350
-			local minHeight = 250
-			local maxWidth = viewport.X * 0.98 or viewport.X * 0.9
-			local maxHeight = viewport.Y * 0.95 or viewport.Y * 0.9
+			local minWidth = isMobile and math.max(250, viewport.X * 0.4) or 250
+			local minHeight = isMobile and math.max(150, viewport.Y * 0.3) or 150
+			local maxWidth = isMobile and viewport.X * 0.98 or viewport.X * 0.9
+			local maxHeight = isMobile and viewport.Y * 0.95 or viewport.Y * 0.9
 			
 			local newWidth = math.clamp(startSize.X.Offset + deltaX, minWidth, maxWidth)
 			local newHeight = math.clamp(startSize.Y.Offset + deltaY, minHeight, maxHeight)
@@ -3346,18 +3346,18 @@ function Library.Window(self, Options)
                     dropdownCurrenttext.Text = "..."
                 else
                     local fullText = table.concat(chosenValue, ", ")
-                    if (#fullText > 15) then
-                        dropdownCurrenttext.Text = string.sub(fullText, 1, 12) .. "..."
+                    if (#fullText > 11) then
+                        dropdownCurrenttext.Text = string.sub(fullText, 1, 8) .. "..."
                     else
-                        dropdownCurrenttext.Text = fullText
+                        dropdownCurrenttext.Text = fullText .. "..."
                     end
                 end
             else
                 local displayText = tostring(chosenValue)
-                if (#displayText > 15) then
-                    dropdownCurrenttext.Text = string.sub(displayText, 1, 12) .. "..."
+                if (#displayText > 11) then
+                    dropdownCurrenttext.Text = string.sub(displayText, 1, 8) .. "..."
                 else
-                    dropdownCurrenttext.Text = displayText
+                    dropdownCurrenttext.Text = displayText .. "..."
                 end
             end
         end
@@ -4474,6 +4474,16 @@ function Library.Window(self, Options)
 			return Textbox.Value
 		end
 
+		local function updateCurrentText()
+			local chosenValue = Textbox.Value
+			if (not chosenValue or chosenValue == nil) then return end
+            local displayText = tostring(chosenValue)
+                if (#displayText > 8) then
+                    textboxValue.Text = string.sub(displayText, 1, 8)
+                end
+            end
+        end
+
 		textboxValue.Focused:Connect(function()
 			-- Check if the section or element is disabled
 			if Textbox.Section.Disabled or Textbox.Disabled then
@@ -4505,6 +4515,7 @@ function Library.Window(self, Options)
 			}):Play()
 
 			Textbox.Value = textboxValue.Text
+			updateCurrentText()
 			Library.SetFlag(Textbox.Flag, Textbox.Value)
 		end)
 
