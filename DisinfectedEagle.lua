@@ -45,6 +45,7 @@ local Helpers =
     },
 
 
+
     BoostFrames = function(self)
         for _, obj in pairs(Workspace:GetDescendants()) do
             if (obj:IsA("BasePart")) then
@@ -199,7 +200,6 @@ local Helpers =
 
 local Globals =
 {
-    InterfaceKey = Enum.KeyCode.RightControl,
     Rarities = {"Common", "Rare", "Epic", "Legendary", "Mythic", "Godly", "Limited", "Secret"},
     RarityOrder =
     {
@@ -812,6 +812,18 @@ local Utils =
     CachedPlot = nil,
     CachedTool = nil,
 
+    ConvertToEnumkey = function(self, text)
+        local enumMap = {
+            RShift = Enum.KeyCode.RightShift,
+            RCtrl = Enum.KeyCode.RightControl,
+            LAlt = Enum.KeyCode.LeftAlt,
+            RAlt = Enum.KeyCode.RightAlt,
+            Caps = Enum.KeyCode.CapsLock,
+            Insert = Enum.KeyCode.Insert
+        }
+        
+        return enumMap[text]
+    end,
 
     ReturnMaxInventory = function(self)
         local max = ModuleManager:GetModule("Utils"):GetMaxInventorySpace(game.Players.LocalPlayer)
@@ -1418,7 +1430,7 @@ local Config =
     {
         AutoFavorite = false,
         FavoriteOptions = {"Rarity", "Value", "Weight"},
-        SelectedFavoriteOptions = {"Rarity"},
+        SelectedFavoriteOptions = {},
         FavoritePriority = {"Value", "Weight", "Rarity"},
         SelectedFavoritePriority = "Value",
         FavoriteRarities = Globals.Rarities,
@@ -1450,8 +1462,15 @@ local Config =
     Settings =
     {
         Lowgraphics = false,
+        DeleteOthersBrainrots = false,
+        DeleteOthersPlants = false,
+        SetMaxFps = "Disabled",
+        
 
         Notifications = true,
+        -- RShift RCtrl LAlt RAlt Caps Insert only these.
+        KeyList = {"RShift", "RCtrl", "LAlt", "RAlt", "Caps", "Insert"},
+        SelectedKey = "RCtrl",
     },
 
     Items =
@@ -1973,15 +1992,42 @@ local Features =
         OpenPacks = function(self)
             -- packevent
             local backpack = game.Players.LocalPlayer:FindFirstChild("Backpack")
+            local equipped = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool")
+
+            if (equipped and string.find(string.lower(equipped.Name), "pack")) then
+                packevent:FireServer()
+                if (Config.Settings.Notifications) then
+                    Library:Notification("CARDS » Opening " .. tostring(equipped.Name), 3, "success")
+                end
+                return true
+            end
+
             for i,v in pairs(backpack:GetChildren()) do
                 local loweredname = string.lower(v.Name)
                 if (v:IsA("Tool") and string.find(loweredname, "pack")) then
+                    Restores:RestoreCombatConn(false)
+                    if (equipped) then
+                        Utils:EquipTool(false, true)
+                    end
+
+                    task.wait(0.1)
+
                     v.Parent = game.Players.LocalPlayer.Character
+                    equipped = v
                     break
                 end
             end
 
+            if (not equipped or not string.find(string.lower(equipped.Name), "pack")) then return end
+
             packevent:FireServer()
+
+            if (Config.Settings.Notifications) then
+                Library:Notification("CARDS » Opening " .. tostring(equipped.Name), 3, "success")
+            end
+
+            task.wait(0.1)
+            Restores:RestoreCombatConn(true)
         end,
 
         EggFunc = nil,
@@ -2064,10 +2110,6 @@ local Features =
             if (equipped) then return end
 
             -- couldnt find any eggs, set cooldown upto 15 + restore.
-            if (Config.Settings.Notifications) then
-                Library:Notification("EGGS » No more eggs found, disabling..", 3, "warning")
-            end
-
             if (self.EggFunc) then
                 restorefunction(self.EggFunc)
                 self.EggFunc = nil
@@ -2076,6 +2118,53 @@ local Features =
             end
         end,
     },
+
+    Settings =
+    {
+        Storage =
+        {
+            DeleteConn = nil,
+            PlantConn = nil
+        },
+
+        DeleteOthersBrainrots = function(self)
+            if (Config.Settings.DeleteOthersBrainrots == true) then
+                local path = workspace.ScriptedMap.Brainrots
+                DeleteConn = path.ChildAdded:Connect(function(child)
+                    if (child:GetAttribute("AssociatedPlayer") ~= lcl.UserId) then
+                        child:Destroy()
+                    end
+                end)
+            else
+                if (DeleteConn) then
+                    DeleteConn:Disconnect()
+                    DeleteConn = nil
+                end
+            end
+        end,
+
+        DeleteOthersPlants = function(self)
+            if (Config.Settings.DeleteOthersPlants == true) then
+                for i,v in pairs(workspace.Plots:GetChildren()) do
+                    if (v:GetAttribute("Owner") ~= lcl.Name) then
+                        local path = v.Plants
+                        for i,v in pairs(path:GetChildren()) do
+                            v:Destroy()
+                        end
+
+                        PlantConn = path.ChildAdded:Connect(function(child)
+                            child:Destroy()
+                        end)
+                    end
+                end
+            else
+                if (PlantConn) then
+                    PlantConn:Disconnect()
+                    PlantConn = nil
+                end
+            end
+        end,
+    }
 }
 
 Subsections.Combat:Toggle({
@@ -2397,19 +2486,15 @@ Sections.Favorites:Dropdown({
     end,
 })
 
+-- seperator
+Sections.Favorites:Separator()
+
 Sections.Favorites:Dropdown({
     Name = "Select Rarities",
     Flag = "FavoriteRarities",
     Max = 99,
     Options = Config.Favorites.FavoriteRarities, 
     Default = Config.Favorites.SelectedFavoriteRarities,
-    Depends = 
-    {
-        ["FavoriteOptions"] = 
-        {
-            contains = {"Rarity"},
-        },
-    },
     Callback = function(value)
         Config.Favorites.SelectedFavoriteRarities = value
     end,
@@ -2423,13 +2508,6 @@ Sections.Favorites:Slider({
     Default = Config.Favorites.WeightThreshold,
     Flag = "FavoriteWeightThreshold",
     Suffix = "KG",
-    Depends = 
-    {
-        ["FavoriteOptions"] = 
-        {
-            contains = {"Weight"},
-        },
-    },
     Callback = function(value)
         Config.Favorites.WeightThreshold = tonumber(value) or 0
     end,
@@ -2442,13 +2520,6 @@ Sections.Favorites:Slider({
     Default = Config.Favorites.ValueThreshold,
     Flag = "FavoriteValueThreshold",
     Suffix = "$",
-    Depends = 
-    {
-        ["FavoriteOptions"] = 
-        {
-            contains = {"Value"},
-        },
-    },
     Callback = function(value)
         Config.Favorites.ValueThreshold = tonumber(value) or 0
     end,
@@ -2524,16 +2595,14 @@ Subsections.Seeds:Dropdown({
 })
 
 Subsections.Seeds:Textbox({
-    Name = "Quantity",
+    Name = "Seed Quantity",
     Flag = "SeedPurchaseAmount",
     PlaceholderText = "None..",
+    Default = Config.Shop.SeedPurchaseAmount,
     Callback = function(value)
         value = Helpers:ConvertToNumbers(value) or 0
-        if (value and value >= 0) then
-            Config.Shop.SeedPurchaseAmount = value
-            Config.Cooldowns.LastPurchasedSeeds = 0
-            --warn("Set seed purchase amount to: " .. tostring(Config.Shop.SeedPurchaseAmount))
-        end
+        Config.Shop.SeedPurchaseAmount = value
+        Config.Cooldowns.LastPurchasedSeeds = 0
     end,
 })
 
@@ -2589,21 +2658,21 @@ Subsections.Gears:Dropdown({
 })
 
 Subsections.Gears:Textbox({
-    Name = "Quantity",
+    Name = "Gear Quantity",
     Flag = "GearPurchaseAmount",
+    Default = Config.Shop.GearPurchaseAmount,
     PlaceholderText = "None..",
     Callback = function(value)
         value = Helpers:ConvertToNumbers(value) or 0
-        if (value and value >= 0) then
-            Config.Shop.GearPurchaseAmount = value
-            Config.Cooldowns.LastPurchasedGears = 0
-            --warn("Set gear purchase amount to: " .. tostring(Config.Shop.GearPurchaseAmount))
-        end
+        Config.Shop.GearPurchaseAmount = value
+        Config.Cooldowns.LastPurchasedGears = 0
+        --warn("Set gear purchase amount to: " .. tostring(Config.Shop.GearPurchaseAmount))
     end,
 })
 
+-- Options
 Subsections.Settings:Toggle({
-    Name = "Max Performance",
+    Name = "Low Graphics",
     Flag = "Lowgraphics",
     Default = Config.Settings.Lowgraphics,
     Callback = function(value)
@@ -2616,15 +2685,60 @@ Subsections.Settings:Toggle({
     end,
 })
 
+-- DeleteOthersBrainrots
+Subsections.Settings:Toggle({
+    Name = "Delete Others Brainrots",
+    Flag = "DeleteOthersBrainrots",
+    Default = Config.Settings.DeleteOthersBrainrots,
+    Callback = function(value)
+        Config.Settings.DeleteOthersBrainrots = value
+        Features.Settings:DeleteOthersBrainrots()
+    end,
+})
+
+-- DeleteOthersPlants
+Subsections.Settings:Toggle({
+    Name = "Delete Others Plants",
+    Flag = "DeleteOthersPlants",
+    Default = Config.Settings.DeleteOthersPlants,
+    Callback = function(value)
+        Config.Settings.DeleteOthersPlants = value
+        Features.Settings:DeleteOthersPlants()
+    end,
+})
+
+-- MAX FPS DROPDOWN
+Subsections.Settings:Dropdown({
+    Name = "Limit FPS         ",
+    Flag = "MaxFPS",
+    Options = {"Disabled", "30", "60", "144", "240", "Unlimited"},
+    Default = Config.Settings.SetMaxFps,
+    Callback = function(value)
+        Config.Settings.SetMaxFps = value
+        if (value ~= "Disabled") then
+            if (value == "Unlimited") then
+                setfpscap(0)
+                return
+            end
+
+            value = tonumber(value)
+            setfpscap(value)
+            return
+        end
+    end,
+})
+
 
 -- Interface
-local UIKeybind = Subsections.Interface:Keybind({
+Subsections.Interface:Dropdown({
     Name = "Interface Key",
-    Key = Library.UIKey,
-    Mode = "Hold",
+    Flag = "interfacekeybind",
+    Options = Config.Settings.KeyList, 
+    Default = Config.Settings.SelectedKey,
     Callback = function(value)
-        if (Library.UIKey == value) then return end
-        Restores:UpdateKeybind()
+        Config.Settings.InterfaceKey = value
+        local enumKey = Utils:ConvertToEnumkey(value)
+        Library.UIKey = enumKey
     end,
 })
 
@@ -2869,12 +2983,27 @@ local ConfigsModule =
         ConfigKey = "",
     },
 
+    GetAutoloadConfigName = function(self)
+        local filePath = Storage.ConfigsPath .. "/autoload.json"
+        if (isfile(filePath)) then
+            local content = readfile(filePath)
+            return content or nil
+        end
+        return nil
+    end,
+
     GetConfigurations = function(self)
         self.Cache.Configs = {}
+        local autoloadname = self:GetAutoloadConfigName()
         for _, file in pairs(listfiles(Storage.ConfigsPath)) do
             if (file:match("%.json$")) then
                 local configName = file:match("([^/\\]+)%.json$")
-                if (configName) then
+
+                if (configName and configName == autoloadname) then
+                    configName = configName .. " [autoload]"
+                end
+
+                if (configName and configName ~= "autoload") then
                     table.insert(self.Cache.Configs, configName)
                 end
             end
@@ -2913,8 +3042,9 @@ local ConfigsModule =
         if (not isValid) then
             return false, result
         end
-        
+
         local cleanName = result
+
         local content = Library:GetConfig()
         local filePath = Storage.ConfigsPath .. "/" .. cleanName .. ".json"
         
@@ -2925,6 +3055,7 @@ local ConfigsModule =
             message = "Config '" .. cleanName .. "' saved successfully"
         end
         
+        content = base64.encode(content)
         writefile(filePath, content)
         self:GetConfigurations()
         return true, message
@@ -2934,11 +3065,17 @@ local ConfigsModule =
         if (not configName or configName == "") then
             return false, "No config selected"
         end
+
+        local autoloadname = self:GetAutoloadConfigName()
+        if (configName == autoloadname .. " [autoload]") then
+            configName = autoloadname
+        end
         
         local filePath = Storage.ConfigsPath .. "/" .. configName .. ".json"
         if (isfile(filePath)) then
             local content = readfile(filePath)
             if (content) then
+                content = base64.decode(content)
                 Library:LoadConfig(content)
                 return true, "Config '" .. configName .. "' loaded successfully"
             end
@@ -2949,6 +3086,11 @@ local ConfigsModule =
     DeleteConfiguration = function(self, configName)
         if (not configName or configName == "") then
             return false, "No config selected"
+        end
+
+        local autoloadname = self:GetAutoloadConfigName()
+        if (configName == autoloadname .. " [autoload]") then
+            configName = autoloadname
         end
         
         if (configName == "Default") then
@@ -2972,6 +3114,11 @@ local ConfigsModule =
             
             if (self.Cache.SelectedConfig and self.Cache.SelectedConfig ~= "") then
                 configName = self.Cache.SelectedConfig
+                local autoloadname = self:GetAutoloadConfigName()
+                if (configName == autoloadname .. " [autoload]") then
+                    configName = autoloadname
+                end
+
                 success, message = self:SaveConfiguration(configName)
             else
                 configName = self.Cache.TextboxInput
@@ -3000,17 +3147,68 @@ local ConfigsModule =
             else
                 success, message = self:DeleteConfiguration(self.Cache.SelectedConfig)
             end
+        elseif (self.Cache.SelectedAction == "Auto-Load") then
+            if (not self.Cache.SelectedConfig) then
+                message = "Please select a config to autoload"
+            else
+                self:SetAutoload(self.Cache.SelectedConfig)
+                success = true
+                message = false
+            end
         end
         
         --print(message)
-        if (Config.Settings.Notifications) then
+
+        if (message and message ~= false) then
             Library:Notification("LUNOR » " .. message, 3, success and "success" or "error")
         end
+        
         return success, message
+    end,
+
+    SetAutoload = function(self, configname)
+        local filePath = Storage.ConfigsPath .. "/" .. "autoload" .. ".json"
+        local content = readfile(filePath)
+        
+        local autoloadname = self:GetAutoloadConfigName()
+        if (configname == autoloadname .. " [autoload]") then
+            configname = autoloadname
+        end
+
+        if (content == configname) then
+            writefile(filePath, "")
+            self:GetConfigurations()
+            Library:Notification("LUNOR » Auto-Load disabled.", 3, "success")
+            return
+        end
+
+        writefile(filePath, configname)
+        self:GetConfigurations()
+        Library:Notification("LUNOR » Auto-Load set to '" .. configname .. "'", 3, "success")
+    end,
+
+    DoAutoload = function(self)
+        local filePath = Storage.ConfigsPath .. "/" .. "autoload" .. ".json"
+        if (not isfile(filePath)) then
+            writefile(filePath, "")
+            return
+        end
+
+        local configname = readfile(filePath)
+        if (not isfile(Storage.ConfigsPath .. "/" .. configname .. ".json")) then
+            writefile(filePath, "")
+            return
+        end
+
+        if (configname and configname ~= "" and configname ~= "nil" and configname ~= "null") then
+            self:LoadConfiguration(configname)
+            Library:Notification("LUNOR » Auto-Load config '" .. configname .. "' loaded successfully", 3, "success")
+        end
     end,
 }
 
 ConfigsModule:GetConfigurations()
+
 Sections.Configs:Textbox({
     Name = "Name",
     Flag = "ConfigsName",
@@ -3033,7 +3231,7 @@ local configlist = Sections.Configs:List({
 Sections.Configs:Dropdown({
     Name = "Actions",
     Flag = "ConfigsActions",
-    Options = {"Save", "Load", "Delete", "Create"},
+    Options = {"Save", "Load", "Delete", "Create", "Auto-Load"},
     Searchable = true,
     Default = "Load",
     Callback = function(value)
@@ -3082,7 +3280,7 @@ Sections.ShareConfigs:Textbox({
 
 -- load from configkey
 Sections.ShareConfigs:Button({
-    Name = "Load",
+    Name = "Load from Key",
     Callback = function()
         local content = ConfigsModule.Cache.ConfigKey
         if (not content or content == "" or content == "None") then
@@ -3122,7 +3320,7 @@ Sections.ShareConfigs:Button({
 
 -- export
 Sections.ShareConfigs:Button({
-    Name = "Share",
+    Name = "Copy Config-Key",
     Callback = function()
         local content = Library:GetConfig()
         content = base64.encode(content)
@@ -3156,7 +3354,7 @@ local runtime =
         local untillboss = ModuleManager:GetModule("PlayerData"):GetData().Data.BrainrotsForBoss or "None"
         local boost = ModuleManager:GetModule("PlayerData"):GetData().Data.Boost or "None"
 
-        if (self.cache.lasttarget == target and self.cache.lastlevel == level and self.cwache.lastuntillboss == untillboss and self.cache.lastboost == boost) then return end
+        if (self.cache.lasttarget == target and self.cache.lastlevel == level and self.cache.lastuntillboss == untillboss and self.cache.lastboost == boost) then return end
 
         self.cache.lasttarget = target
         self.cache.lastlevel = level
@@ -3230,10 +3428,8 @@ Restores =
             return
         end
     end,
-
-    UpdateKeybind = function(self)
-        local key = UIKeybind:GetKey()
-        Library.UIKey = key
-    end,
 }
 
+
+task.wait(1)
+ConfigsModule:DoAutoload()
