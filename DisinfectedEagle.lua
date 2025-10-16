@@ -12,7 +12,7 @@ local IdledConnection = LocalPlayer.Idled:Connect(function()
     virtualUser:ClickButton2(Vector2.new())
 end)
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/Doki/refs/heads/main/lib.lua"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/ServerlistDatabase.lua"))()
 local Storage =
 {
     Icons = {},
@@ -2401,6 +2401,7 @@ Sections.Favorites:Dropdown({
         Config.Favorites.SelectedFavoriteRarities = value
     end,
 })
+
 
 Sections.Favorites:Slider({
     Name = "Weight's Above        ",
