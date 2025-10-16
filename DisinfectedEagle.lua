@@ -2511,9 +2511,9 @@ Subsections.Seeds:Dropdown({
 })
 
 Subsections.Seeds:Textbox({
-    Name = "Select Quantity",
+    Name = "Buy Amount",
     Flag = "SeedPurchaseAmount",
-    PlaceholderText = "Enter amount..",
+    PlaceholderText = "Empty..",
     Callback = function(value)
         value = Helpers:ConvertToNumbers(value) or 0
         if (value and value >= 0) then
@@ -2576,9 +2576,9 @@ Subsections.Gears:Dropdown({
 })
 
 Subsections.Gears:Textbox({
-    Name = "Select Quantity",
+    Name = "Buy Amount",
     Flag = "GearPurchaseAmount",
-    PlaceholderText = "Enter amount..",
+    PlaceholderText = "Empty..",
     Callback = function(value)
         value = Helpers:ConvertToNumbers(value) or 0
         if (value and value >= 0) then
@@ -3009,7 +3009,7 @@ ConfigsModule:GetConfigurations()
 Sections.Configs:Textbox({
     Name = "Name",
     Flag = "ConfigsName",
-    PlaceholderText = "Enter config name..",
+    PlaceholderText = "Empty..",
     Callback = function(value)
         ConfigsModule.Cache.TextboxInput = value
     end,
