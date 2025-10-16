@@ -672,10 +672,10 @@ function Library.Window(self, Options)
 			local deltaY = inputPos.Y - startPos.Y
 			
 			local viewport = workspace.CurrentCamera.ViewportSize
-			local minWidth = isMobile and math.max(300, viewport.X * 0.2) or 350
-			local minHeight = isMobile and math.max(250, viewport.Y * 0.1) or 250
-			local maxWidth = isMobile and viewport.X * 0.98 or viewport.X * 0.9
-			local maxHeight = isMobile and viewport.Y * 0.95 or viewport.Y * 0.9
+			local minWidth = 350
+			local minHeight = 250
+			local maxWidth = viewport.X * 0.98 or viewport.X * 0.9
+			local maxHeight = viewport.Y * 0.95 or viewport.Y * 0.9
 			
 			local newWidth = math.clamp(startSize.X.Offset + deltaX, minWidth, maxWidth)
 			local newHeight = math.clamp(startSize.Y.Offset + deltaY, minHeight, maxHeight)
