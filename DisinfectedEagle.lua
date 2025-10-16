@@ -2097,7 +2097,7 @@ Subsections.Combat:Toggle({
 })
 
 Subsections.Combat:Dropdown({
-    Name = "Target Method",
+    Name = "Target Mode",
     Flag = "CombatPriority",
     Options = Config.Farm.Priority, 
     Default = Config.Farm.SelectedPriority,
