@@ -12,9 +12,9 @@ local IdledConnection = LocalPlayer.Idled:Connect(function()
     virtualUser:ClickButton2(Vector2.new())
 end)
 
-local libfile = readfile("lib.lua")
-local Library = loadstring(libfile)()
---local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/ServerlistDatabase.lua"))()
+--local libfile = readfile("lib.lua")
+--local Library = loadstring(libfile)()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/ServerlistDatabase.lua"))()
 local Storage =
 {
     Icons = {},
