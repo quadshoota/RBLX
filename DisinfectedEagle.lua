@@ -12,7 +12,9 @@ local IdledConnection = LocalPlayer.Idled:Connect(function()
     virtualUser:ClickButton2(Vector2.new())
 end)
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/ServerlistDatabase.lua"))()
+local libfile = readfile("lib.lua")
+local Library = loadstring(libfile)()
+--local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/ServerlistDatabase.lua"))()
 local Storage =
 {
     Icons = {},
@@ -82,6 +84,8 @@ local Helpers =
             end
         end)
     end,
+
+
 
     RestoreBoost = function(self)
         if (self.FrameConnections.Hiteffects) then
@@ -195,6 +199,7 @@ local Helpers =
 
 local Globals =
 {
+    InterfaceKey = Enum.KeyCode.RightControl,
     Rarities = {"Common", "Rare", "Epic", "Legendary", "Mythic", "Godly", "Limited", "Secret"},
     RarityOrder =
     {
@@ -531,7 +536,8 @@ Library:Window({
     Key = "LunacyWindowsDetectionBoss7261",
     Logo = Dependencies:CustomAsset("LunorPNG"),
 })
-Library:MobileButton()
+
+Library:MobileButton(Dependencies:CustomAsset("LunorPNG"))
 
 
 local VisualEffects = 
@@ -1228,6 +1234,13 @@ local Sections =
     Configs = Tabs.Configs:Section({
         Title = "Configs",
         Side = "Left",
+        ShowTitle = false,
+    }),
+
+    -- Share Configs
+    ShareConfigs = Tabs.Configs:Section({
+        Title = "Share Configs",
+        Side = "Right",
         ShowTitle = false,
     }),
 
@@ -2511,9 +2524,9 @@ Subsections.Seeds:Dropdown({
 })
 
 Subsections.Seeds:Textbox({
-    Name = "Buy Amount",
+    Name = "Quantity",
     Flag = "SeedPurchaseAmount",
-    PlaceholderText = "Empty..",
+    PlaceholderText = "None..",
     Callback = function(value)
         value = Helpers:ConvertToNumbers(value) or 0
         if (value and value >= 0) then
@@ -2576,9 +2589,9 @@ Subsections.Gears:Dropdown({
 })
 
 Subsections.Gears:Textbox({
-    Name = "Buy Amount",
+    Name = "Quantity",
     Flag = "GearPurchaseAmount",
-    PlaceholderText = "Empty..",
+    PlaceholderText = "None..",
     Callback = function(value)
         value = Helpers:ConvertToNumbers(value) or 0
         if (value and value >= 0) then
@@ -2603,7 +2616,18 @@ Subsections.Settings:Toggle({
     end,
 })
 
+
 -- Interface
+local UIKeybind = Subsections.Interface:Keybind({
+    Name = "Interface Key",
+    Key = Library.UIKey,
+    Mode = "Hold",
+    Callback = function(value)
+        if (Library.UIKey == value) then return end
+        Restores:UpdateKeybind()
+    end,
+})
+
 Subsections.Interface:Toggle({
     Name = "Notifications",
     Flag = "Notifications",
@@ -2653,7 +2677,7 @@ Subsections.Projectiles:Dropdown({
 })
 
 Subsections.Projectiles:Dropdown({
-    Name = "Target Method",
+    Name = "Target Mode",
     Flag = "ProjectileOptions",
     Max = 99,
     Options = Config.Items.ProjectileOptions, 
@@ -2724,26 +2748,6 @@ Subsections.Cards:Toggle({
     end,
 })
 
--- seperator
-Subsections.Cards:Separator()
-
--- Max-Level button
-Subsections.Cards:Button({
-    Name = "Merge Cards - [TIER 3]",
-    Callback = function()
-        for i,v in pairs(ModuleManager:GetModule("PlayerData"):GetData().Data.Cards.Inventory) do
-            mergeevent:InvokeServer(
-                {
-                    i,
-                    i,
-                    i,
-                }
-            )
-            --warn("Maxing card: " .. tostring(i))
-            task.wait()
-        end
-    end,
-})
 
 -- autoopeneggs
 Subsections.Eggs:Toggle({
@@ -2862,6 +2866,7 @@ local ConfigsModule =
         SelectedAction = "Load",
         SelectedConfig = nil,
         TextboxInput = "",
+        ConfigKey = "",
     },
 
     GetConfigurations = function(self)
@@ -3009,7 +3014,7 @@ ConfigsModule:GetConfigurations()
 Sections.Configs:Textbox({
     Name = "Name",
     Flag = "ConfigsName",
-    PlaceholderText = "Empty..",
+    PlaceholderText = "Enter name..",
     Callback = function(value)
         ConfigsModule.Cache.TextboxInput = value
     end,
@@ -3036,11 +3041,95 @@ Sections.Configs:Dropdown({
     end,
 })
 
+
 Sections.Configs:Button({
     Name = "Confirm",
     Callback = function()
         ConfigsModule:ExecuteAction()
         configlist:Refresh(ConfigsModule.Cache.Configs)
+    end,
+})
+
+
+Sections.ShareConfigs:Paragraph({
+    Title = "Share Configs",
+    Description = {
+        {
+            Text = "» To share, press the share button",
+        },
+        {
+            Text = "» To load, first enter the config-key",
+        },
+        {
+            Text = "» After setting key, press load button",
+        },
+    },
+    Position = "Center",
+})
+
+-- seperator
+Sections.ShareConfigs:Separator()
+
+-- textbox to enter configkey
+Sections.ShareConfigs:Textbox({
+    Name = "Enter Key",
+    Flag = "ConfigKey",
+    PlaceholderText = "None..",
+    Callback = function(value)
+        ConfigsModule.Cache.ConfigKey = value
+    end,
+})
+
+-- load from configkey
+Sections.ShareConfigs:Button({
+    Name = "Load",
+    Callback = function()
+        local content = ConfigsModule.Cache.ConfigKey
+        if (not content or content == "" or content == "None") then
+            if (Config.Settings.Notifications) then
+                Library:Notification("LUNOR » Please enter a valid config-key", 3, "error")
+            end
+            return
+        end
+
+        local success, decoded = pcall(function()
+            return base64.decode(content)
+        end)
+
+        if (not success or not decoded) then
+            if (Config.Settings.Notifications) then
+                Library:Notification("LUNOR » Invalid config-key", 3, "error")
+            end
+            return
+        end
+
+        success, message = pcall(function()
+            Library:LoadConfig(decoded)
+        end)
+
+        if (not success) then
+            if (Config.Settings.Notifications) then
+                Library:Notification("LUNOR » Failed to load config-key", 3, "error")
+            end
+            return
+        end
+
+        if (Config.Settings.Notifications) then
+            Library:Notification("LUNOR » Config loaded from key successfully", 3, "success")
+        end
+    end,
+})
+
+-- export
+Sections.ShareConfigs:Button({
+    Name = "Share",
+    Callback = function()
+        local content = Library:GetConfig()
+        content = base64.encode(content)
+        setclipboard(content)
+        if (Config.Settings.Notifications) then
+            Library:Notification("LUNOR » Config copied to clipboard", 3, "success")
+        end
     end,
 })
 
@@ -3067,7 +3156,7 @@ local runtime =
         local untillboss = ModuleManager:GetModule("PlayerData"):GetData().Data.BrainrotsForBoss or "None"
         local boost = ModuleManager:GetModule("PlayerData"):GetData().Data.Boost or "None"
 
-        if (self.cache.lasttarget == target and self.cache.lastlevel == level and self.cache.lastuntillboss == untillboss and self.cache.lastboost == boost) then return end
+        if (self.cache.lasttarget == target and self.cache.lastlevel == level and self.cwache.lastuntillboss == untillboss and self.cache.lastboost == boost) then return end
 
         self.cache.lasttarget = target
         self.cache.lastlevel = level
@@ -3082,6 +3171,8 @@ local runtime =
             Event:FireServer(
                 "purchaseReplay"
             )
+
+            task.wait(0.25)
 
             Features.Collect:AutoClaimEvent(true)
         end
@@ -3138,6 +3229,11 @@ Restores =
             end)
             return
         end
+    end,
+
+    UpdateKeybind = function(self)
+        local key = UIKeybind:GetKey()
+        Library.UIKey = key
     end,
 }
 
