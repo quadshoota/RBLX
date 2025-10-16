@@ -3352,8 +3352,8 @@ function Library.Window(self, Options)
                     dropdownCurrenttext.Text = "..."
                 else
                     local fullText = table.concat(chosenValue, ", ")
-                    if (#fullText > 11) then
-                        dropdownCurrenttext.Text = string.sub(fullText, 1, 8) .. "..."
+                    if (#fullText > Library:ReturnMaxChars()) then
+                        dropdownCurrenttext.Text = string.sub(fullText, 1, Library:ReturnMaxChars()) .. "..."
                     else
                         dropdownCurrenttext.Text = fullText .. "..."
                     end
