@@ -161,21 +161,26 @@ end
 
 function Library.ReturnMaxChars(self)
 	local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-	-- mobile max 5, desktop max 8
-	return isMobile and 5 or 8
+	-- mobile max 6, desktop max 8
+	return isMobile and 6 or 8
 end
 
 function Library.GetCharsFromTable(self, tbl)
-	local totalChars = 0
-	
-	if (not tbl or #tbl == 0) then
-		return totalChars
-	end
-
-	for _, str in pairs(tbl) do
-		totalChars = totalChars + #tostring(str)
-	end
-	return totalChars
+    local totalChars = 0
+    
+    if (type(tbl) == "table") then
+        if (#tbl == 0) then
+            return totalChars
+        end
+        
+        for _, str in pairs(tbl) do
+            totalChars = totalChars + #tostring(str)
+        end
+    else
+        totalChars = #tostring(tbl)
+    end
+    
+    return totalChars
 end
 
 function Library.NextFlag()
@@ -3359,27 +3364,27 @@ function Library.Window(self, Options)
             end)
         end
 
-        local function updateCurrentText()
-            if (Dropdown.Max) then
-                if (#chosenValue == 0) then
-                    dropdownCurrenttext.Text = "..."
-                else
-                    local fullText = Library:GetCharsFromTable(chosenValue)
-                    if (#fullText > Library:ReturnMaxChars()) then
-                        dropdownCurrenttext.Text = string.sub(fullText, 1, Library:ReturnMaxChars()) .. "..."
-                    else
-                        dropdownCurrenttext.Text = fullText .. "..."
-                    end
-                end
-            else
-                local displayText = tostring(chosenValue)
-                if (#displayText > Library:ReturnMaxChars()) then
-                    dropdownCurrenttext.Text = string.sub(displayText, 1, Library:ReturnMaxChars()) .. "..."
-                else
-                    dropdownCurrenttext.Text = displayText .. "..."
-                end
-            end
-        end
+		local function updateCurrentText()
+			if (Dropdown.Max) then
+				if (#chosenValue == 0) then
+					dropdownCurrenttext.Text = ""
+				else
+					local displayText = table.concat(chosenValue, ", ")
+					if (#displayText > Library:ReturnMaxChars()) then
+						dropdownCurrenttext.Text = string.sub(displayText, 1, Library:ReturnMaxChars())
+					else
+						dropdownCurrenttext.Text = displayText
+					end
+				end
+			else
+				local displayText = tostring(chosenValue) or ""
+				if (#displayText > Library:ReturnMaxChars()) then
+					dropdownCurrenttext.Text = string.sub(displayText, 1, Library:ReturnMaxChars())
+				else
+					dropdownCurrenttext.Text = displayText
+				end
+			end
+		end
 
 		local function setOptionSelectedLook(optionInst, isSelected)
 			if (not optionInst) then
