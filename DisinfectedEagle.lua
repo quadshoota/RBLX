@@ -1,6 +1,7 @@
 
 
 repeat task.wait() until game:IsLoaded()
+repeat task.wait() until game.Players.LocalPlayer and game.Players.LocalPlayer.Character
 
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
@@ -12,14 +13,9 @@ local IdledConnection = LocalPlayer.Idled:Connect(function()
     virtualUser:ClickButton2(Vector2.new())
 end)
 
---local libfile = readfile("lib.lua")
---local Library = loadstring(libfile)()
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/ServerlistDatabase.lua"))()
-local Storage =
-{
-    Icons = {},
-    ConfigsPath = nil,
-}
+local lcl = game.Players.LocalPlayer
+local hrp = game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+local humanoid = game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
 
 local Services = 
 {
@@ -29,6 +25,32 @@ local Services =
     ReplicatedStorage = game:GetService("ReplicatedStorage"),
     Debris = game:GetService("Debris"),
     UserInputService = game:GetService("UserInputService"),
+}
+
+repeat task.wait(1) until Services.ReplicatedStorage.Remotes:FindFirstChild("FavoriteItem")
+local combatevent = Services.ReplicatedStorage.Remotes.AttacksServer.WeaponAttack
+local favoriteevent = Services.ReplicatedStorage.Remotes.FavoriteItem
+local sellevent = Services.ReplicatedStorage.Remotes.ItemSell
+local equipbest = Services.ReplicatedStorage.Remotes.EquipBest
+local buygearevent = Services.ReplicatedStorage.Remotes.BuyGear
+local buyitem = Services.ReplicatedStorage.Remotes.BuyItem
+local pickupevent = Services.ReplicatedStorage.Remotes.RemoveItem
+local placeevent = Services.ReplicatedStorage.Remotes.PlaceItem
+local useitemevent = Services.ReplicatedStorage.Remotes.UseItem
+local packevent = Services.ReplicatedStorage.Remotes.OpenHeldPack
+local equipitem = Services.ReplicatedStorage.Remotes.EquipItem
+local eggremote = Services.ReplicatedStorage.Remotes.OpenEgg
+local mergevent = Services.ReplicatedStorage.Remotes.MergeCards
+local cardupdateevent = Services.ReplicatedStorage.Remotes.CardUpdateEvent
+
+--local libfile = readfile("lib.lua")
+--local Library = loadstring(libfile)()
+
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/quadshoota/RBLX/refs/heads/main/ServerlistDatabase.lua"))()
+local Storage =
+{
+    Icons = {},
+    ConfigsPath = nil,
 }
 
 
@@ -200,6 +222,7 @@ local Helpers =
 
 local Globals =
 {
+    Version = "Developer",
     Rarities = {"Common", "Rare", "Epic", "Legendary", "Mythic", "Godly", "Limited", "Secret"},
     RarityOrder =
     {
@@ -231,6 +254,9 @@ local Globals =
 
     AllSeeds = {"All"},
     AllGears = {"All"},
+    GearNames = {},
+    AllPotions = {},
+    AllEvents = {},
     SeedRarities = {},
     GearRarities = {},
 }
@@ -324,6 +350,18 @@ local ModuleManager =
                 path = "PackObject"
             },
 
+            GearRegistry =
+            {
+                base = game.ReplicatedStorage.Modules.Registries,
+                path = "GearRegistry"
+            },
+
+            EventRegistry =
+            {
+                base = game.ReplicatedStorage.Modules.Registries,
+                path = "EventRegistry"
+            },
+
         }
         
         local config = moduleConfigs[moduleName]
@@ -350,6 +388,21 @@ for i,v in pairs(ModuleManager:GetModule("BrainrotMutations").Colors) do
     --warn("name: " .. i .. " | boost: " .. v.Boost)
 end
 
+local ignoredgears = {"Frost Blower", "Water Bucket", "Premium Water", "Handcuffs"}
+for i,v in pairs(ModuleManager:GetModule("GearRegistry")) do
+
+    if (string.find(i, "Gun") or string.find(i, "Grenade") or string.find(i, "Launcher")) then
+        table.insert(Globals.GearNames, i)
+    elseif (string.find(i, "Potion")) then
+        table.insert(Globals.AllPotions, i)
+    end
+end
+
+for i,v in pairs(ModuleManager:GetModule("EventRegistry")) do
+    table.insert(Globals.AllEvents, i)
+end
+
+
 --PlantRegistry
 for i,v in pairs(ModuleManager:GetModule("Chances")) do
     for i2, v2 in pairs(v) do
@@ -367,24 +420,6 @@ for i,v in pairs(ModuleManager:GetModule("FuseCombinations")) do
     table.insert(Globals.FuseCombinations, {Plant = plant, Brainrot = brainrot, Result = result})
     --warn("plant: " .. plant .. " | brainrot: " .. brainrot .. " | result: " .. result)
 end
-
-
-local lcl = game.Players.LocalPlayer
-local hrp = game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-local humanoid = game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-local combatevent = game:GetService("ReplicatedStorage").Remotes.AttacksServer.WeaponAttack
-local favoriteevent = game:GetService("ReplicatedStorage").Remotes.FavoriteItem
-local sellevent = game:GetService("ReplicatedStorage").Remotes.ItemSell
-local equipbest = game:GetService("ReplicatedStorage").Remotes.EquipBest
-local buygearevent = game:GetService("ReplicatedStorage").Remotes.BuyGear
-local buyitem = game:GetService("ReplicatedStorage").Remotes.BuyItem
-local pickupevent = game:GetService("ReplicatedStorage").Remotes.RemoveItem
-local placeevent = game:GetService("ReplicatedStorage").Remotes.PlaceItem
-local useitemevent = game:GetService("ReplicatedStorage").Remotes.UseItem
-local packevent = game:GetService("ReplicatedStorage").Remotes.OpenHeldPack
-local equipitem = game:GetService("ReplicatedStorage").Remotes.EquipItem
-local eggremote = game:GetService("ReplicatedStorage").Remotes.OpenEgg
-local mergeevent = game:GetService("ReplicatedStorage").Remotes.MergeCards
 
 local DesyncLibrary = 
 {
@@ -540,277 +575,19 @@ Library:Window({
 Library:MobileButton(Dependencies:CustomAsset("LunorPNG"))
 
 
-local VisualEffects = 
-{
-    CreateHitTracer = function(self, StartPosition, EndPosition)
-        local tracer = Instance.new('Part')
-        tracer.Anchored = true
-        tracer.CanCollide = false
-        tracer.Shape = Enum.PartType.Cylinder
-        tracer.Material = Enum.Material.SmoothPlastic
-        tracer.Color = Color3.fromRGB(128, 128, 128)
-        tracer.Transparency = 0.5
-
-        local distance = (EndPosition - StartPosition).Magnitude
-        tracer.Size = Vector3.new(distance, 0.1, 0.1)
-
-        local midpoint = (StartPosition + EndPosition) / 2
-        tracer.CFrame = CFrame.lookAt(midpoint, EndPosition)
-            * CFrame.Angles(0, math.pi / 2, 0)
-
-        tracer.Parent = workspace
-        game:GetService('Debris'):AddItem(tracer, 0.5)
-
-        return tracer
-    end,
-
-    CreateHitEffect = function(self, targetModel, damageText)
-        -- game:GetService("Players").LocalPlayer.PlayerScripts.Client.Modules["Weapons [Client]"].Bat.LegacyBats.HitEffect
-        -- game:GetService("Players").LocalPlayer.PlayerScripts.Client.Modules["Weapons [Client]"].Bat.HitEffect
-        local attachment = game:GetService('Players').LocalPlayer.PlayerScripts.Client.Modules["Weapons [Client]"].Bat.HitEffect.Attachment:Clone()
-        attachment.Parent = targetModel.PrimaryPart
-        
-        for _, emitter in pairs(attachment:GetChildren()) do
-            emitter:Emit(emitter:GetAttribute('EmitCount') or 10)
-        end
-        
-        local highlight = Instance.new('Highlight')
-        highlight.FillTransparency = 0.3
-        highlight.OutlineTransparency = 1
-        highlight.DepthMode = Enum.HighlightDepthMode.Occluded
-        highlight.Parent = targetModel
-        
-        local damageMarkerModule = require(game:GetService('ReplicatedStorage').Modules.Effect.DamageMarker)
-        damageMarkerModule(targetModel.PrimaryPart.Position, tostring(damageText))
-        
-        local springModule = require(game:GetService('ReplicatedStorage').Modules.Utility.Tweener.Spring)
-        springModule.target(highlight, 0.9, 3, {
-            ['FillTransparency'] = 1,
-        })
-
-        Services.Debris:AddItem(highlight, 0.3)
-        Services.Debris:AddItem(attachment, 2)
-    end,
-
-    CreateCustomDamageMarker = function(self, targetPosition, damageText, color, darkerColor)
-        local replicatedStorage = game:GetService('ReplicatedStorage')
-        local springModule = require(replicatedStorage.Modules.Utility.Tweener.Spring)
-        
-        local attachment = Instance.new('Attachment')
-        attachment.Parent = workspace.Terrain
-        attachment.WorldPosition = targetPosition
-        
-        local billboardGui = replicatedStorage.Modules.Effect.DamageMarker.BillboardGui:Clone()
-        billboardGui.Frame.DamageShadow.TextColor3 = darkerColor
-        billboardGui.Frame.DamageShadow.Damage.TextColor3 = color
-        billboardGui.Frame.DamageShadow.Damage.TextStrokeColor3 = darkerColor
-        billboardGui.Parent = attachment
-        billboardGui.Frame.DamageShadow.Text = damageText or 'Lunor Error'
-        billboardGui.Frame.DamageShadow.Damage.Text = damageText or 'Lunor Error'
-        
-        springModule.target(billboardGui.Frame.UIScale, 0.9, 3, {
-            ['Scale'] = 0.2 + math.random(-10, 50) / 100,
-        })
-        
-        local randomX = math.random(-5, 5)
-        local randomY = math.random(-3, 3)
-        local offsetConfig = {}
-        offsetConfig.StudsOffset = vector.create(randomX, randomY, 0)
-        
-        springModule.target(billboardGui, 1.5, 2, offsetConfig)
-        
-        task.delay(0.65, function()
-            springModule.target(billboardGui.Frame.DamageShadow, 0.9, 2.5, {
-                ['TextTransparency'] = 1,
-                ['TextStrokeTransparency'] = 1,
-            })
-            springModule.target(billboardGui.Frame.DamageShadow.Damage, 0.9, 2.5, {
-                ['TextTransparency'] = 1,
-                ['TextStrokeTransparency'] = 1,
-            })
-        end)
-    end,
-
-    CreateHitEffectColored = function(self, targetModel, damageText, color, darkerColor)
-        local attachment = game:GetService('Players').LocalPlayer.PlayerScripts.Client.Modules["Weapons [Client]"].Bat.HitEffect.Attachment:Clone()
-        attachment.Parent = targetModel.PrimaryPart
-        
-        for _, emitter in pairs(attachment:GetChildren()) do
-            emitter:Emit(emitter:GetAttribute('EmitCount') or 10)
-        end
-        
-        local highlight = Instance.new('Highlight')
-        highlight.FillColor = color
-        highlight.FillTransparency = 0.3
-        highlight.OutlineTransparency = 1
-        highlight.DepthMode = Enum.HighlightDepthMode.Occluded
-        highlight.Parent = targetModel
-        
-        self:CreateCustomDamageMarker(targetModel.PrimaryPart.Position, tostring(damageText), color, darkerColor)
-        
-        local springModule = require(game:GetService('ReplicatedStorage').Modules.Utility.Tweener.Spring)
-        springModule.target(highlight, 0.9, 3, {
-            ['FillTransparency'] = 1,
-        })
-        
-        Services.Debris:AddItem(highlight, 0.3)
-        Services.Debris:AddItem(attachment, 2)
-    end,
-
-    crosshairdata =
-    {
-        alpha = 0,
-        increasing = true,
-        angle = 0,
-        animX = 0,
-        animY = 0,
-        lines = {},
-        texts = {},
-    },
-
-    clearcrosshair = function(self)
-        local data = self.crosshairdata
-        for _, line in pairs(data.lines) do
-            line:Remove()
-        end
-        for _, text in pairs(data.texts) do
-            text:Remove()
-        end
-        data.lines = {}
-        data.texts = {}
-    end,
-
-    drawcrosshair = function(self)
-        local dt = 1 / 60
-        local alphaSpeed = 0.3
-        local data = self.crosshairdata
-        
-        if (data.increasing) then
-            data.alpha = data.alpha + alphaSpeed * dt
-            if (data.alpha >= 1) then
-                data.alpha = 1
-                data.increasing = false
-            end
-        else
-            data.alpha = data.alpha - alphaSpeed * dt
-            if (data.alpha <= 0) then
-                data.alpha = 0
-                data.increasing = true
-            end
-        end
-        
-        data.angle = data.angle + 1.2 * dt
-        if (data.angle > math.pi * 2) then
-            data.angle = data.angle - math.pi * 2
-        end
-        
-        local mouse = game:GetService('UserInputService'):GetMouseLocation()
-        local cursorX = mouse.X
-        local cursorY = mouse.Y
-        
-        if (data.animX == 0) then
-            data.animX = cursorX
-        end
-        if (data.animY == 0) then
-            data.animY = cursorY
-        end
-        
-        local smoothing = 8
-        local lerpFactor = 1 - math.exp(-smoothing * dt)
-        
-        data.animX = data.animX + (cursorX - data.animX) * lerpFactor
-        data.animY = data.animY + (cursorY - data.animY) * lerpFactor
-        
-        for _, line in pairs(data.lines) do
-            line:Remove()
-        end
-        for _, text in pairs(data.texts) do
-            text:Remove()
-        end
-        data.lines = {}
-        data.texts = {}
-        
-        local size = 10
-        local thickness = 1.5
-        local gap = 5
-        
-        local linePositions = {
-            { { data.animX - size - gap, data.animY }, { data.animX - gap, data.animY } },
-            { { data.animX + gap, data.animY }, { data.animX + size + gap, data.animY } },
-            { { data.animX, data.animY - size - gap }, { data.animX, data.animY - gap } },
-            { { data.animX, data.animY + gap }, { data.animX, data.animY + size + gap } },
-        }
-        
-        local s = math.sin(data.angle)
-        local c = math.cos(data.angle)
-        
-        for i = 1, 4 do
-            local p1 = linePositions[i][1]
-            local p2 = linePositions[i][2]
-            
-            local p1x = p1[1] - data.animX
-            local p1y = p1[2] - data.animY
-            local p2x = p2[1] - data.animX
-            local p2y = p2[2] - data.animY
-            
-            local rp1x = p1x * c - p1y * s + data.animX
-            local rp1y = p1x * s + p1y * c + data.animY
-            local rp2x = p2x * c - p2y * s + data.animX
-            local rp2y = p2x * s + p2y * c + data.animY
-            
-            local outlineOffsets = {
-                { -1, 0 },
-                { 1, 0 },
-                { 0, -1 },
-                { 0, 1 },
-            }
-            
-            for _, offset in pairs(outlineOffsets) do
-                local outline = Drawing.new('Line')
-                outline.From = Vector2.new(rp1x + offset[1], rp1y + offset[2])
-                outline.To = Vector2.new(rp2x + offset[1], rp2y + offset[2])
-                outline.Color = Color3.new(0, 0, 0)
-                outline.Thickness = 1
-                outline.Visible = true
-                table.insert(data.lines, outline)
-            end
-            
-            local mainLine = Drawing.new('Line')
-            mainLine.From = Vector2.new(rp1x, rp1y)
-            mainLine.To = Vector2.new(rp2x, rp2y)
-            mainLine.Color = Color3.new(1, 1, 1)
-            mainLine.Thickness = thickness
-            mainLine.Visible = true
-            table.insert(data.lines, mainLine)
-        end
-        
-        local text1 = Drawing.new('Text')
-        text1.Text = 'Lunor.'
-        text1.Position = Vector2.new(data.animX - 35, data.animY + size + gap + 2)
-        text1.Color = Color3.new(1, 1, 1)
-        text1.Size = 18
-        text1.Center = false
-        text1.Outline = true
-        text1.Visible = true
-        table.insert(data.texts, text1)
-        
-        local text2 = Drawing.new('Text')
-        text2.Text = 'rocks'
-        text2.Position = Vector2.new(data.animX + 10, data.animY + size + gap + 2)
-        text2.Color = Color3.new(0.5, 0.8, 1)
-        text2.Transparency = data.alpha
-        text2.Size = 18
-        text2.Center = false
-        text2.Outline = true
-        text2.Visible = true
-        table.insert(data.texts, text2)
-    end,
-}
-
 local Utils =
 {
     CachedPlot = nil,
     CachedTool = nil,
+
+    FormatPrice = function(self, price)
+        local str = tostring(price)
+        local formatted = str:reverse():gsub("(%d%d%d)", "%1."):reverse()
+        if (formatted:sub(1, 1) == ".") then
+            formatted = formatted:sub(2)
+        end
+        return formatted
+    end,
 
     ConvertToEnumkey = function(self, text)
         local enumMap = {
@@ -948,17 +725,18 @@ local Utils =
         return nil
     end,
 
-    EquipTool = function(self, boolean, force)
-        local tool = self:ReturnTool()
-        if (not tool and not force) then return end
+    Tool = function(self, boolean, inst)
+        local equipped = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool") or nil
 
-        -- game.Players.LocalPlayer:FindFirstChild("Basic Bat")
-        if (boolean == false and lcl.Character:FindFirstChildOfClass("Tool") or boolean == true and lcl.Character:FindFirstChildOfClass("Tool") and lcl.Character:FindFirstChildOfClass("Tool") ~= tool) then
+        if (boolean == false) then
             humanoid:UnequipTools()
-            return
-        elseif (boolean == true) then
-            humanoid:EquipTool(tool)
-            return
+        elseif (boolean == true and inst and inst ~= nil and inst:IsA("Tool") and inst.Parent == game.Players.LocalPlayer.Backpack) then
+            if (equipped and equipped ~= inst) then
+                humanoid:UnequipTools()
+            end
+
+            task.wait()
+            humanoid:EquipTool(inst)
         end
     end,
 
@@ -1214,6 +992,13 @@ local Sections =
         ShowTitle = false,
     }),
 
+    -- Info
+    Info = Tabs.Farm:Section({
+        Title = "Info",
+        Side = "Left",
+        ShowTitle = false,
+    }),
+
     -- Sell
     Sell = Tabs.Shop:Section({
         Title = "Sell",
@@ -1335,6 +1120,12 @@ local Subsections =
         Side = "Left",
     }),
 
+    -- Items/Potions
+    Potions = Sections.Items:Subsection({
+        Name = "Potions",
+        Side = "Left",
+    }),
+
     -- Items/Cards
     Cards = Sections.Items2:Subsection({
         Name = "Cards",
@@ -1366,6 +1157,10 @@ local Config =
         AutoPurchaseGearsConnection = nil,
         AutoOpenCardsConnection = nil,
         AutoCombatConnection = nil,
+
+        -- propertychanged
+        AutoResetConnection = nil,
+        RewardClaimConnection = nil,
     },
 
     Cooldowns =
@@ -1380,7 +1175,7 @@ local Config =
         CollectAndEquipEvery = 35,
         LastCollectedAndEquipped = 0,
         LastCollectedAward = 0,
-        CollectAwardEvery = 10,
+        CollectAwardEvery = 25,
         PurchaseSeedsEvery = 10,
         PurchaseGearsEvery = 10,
         LastPurchasedSeeds = 0,
@@ -1393,6 +1188,10 @@ local Config =
         OpenCardEvery = 1.5,
         LastOpenedEgg = 0,
         OpenEggsEvery = 8,
+        LastUsedPotion = 0,
+        UsePotionEvery = 2,
+        LastEventReset = 0,
+        EventResetEvery = 35,
     },
 
     Farm =
@@ -1408,12 +1207,15 @@ local Config =
 
         Priority = {"Max Health", "Rarity", "Mutation", "Low Health", "Distance"},
         SelectedPriority = "Low Health",
+        FarmEvents = Globals.AllEvents,
+        SelectedFarmEvents = {},
     },
 
     Collect =
     {
         AutoCollectAndEquip = false,
         AutoClaimEvent = false,
+        AutoPurchaseRestart = false,
     },
 
     Sell =
@@ -1437,6 +1239,7 @@ local Config =
         SelectedFavoriteRarities = {},
         WeightThreshold = 0,
         ValueThreshold = 0,
+
     },
 
     Shop =
@@ -1476,15 +1279,21 @@ local Config =
     Items =
     {
         AutoProjectiles = false,
-        Projectiles = {"Frost Grenade", "Banana Gun", "Carrot Launcher"},
+        AutoPotions = false,
+        Projectiles = Globals.GearNames,
         SelectedProjectiles = {},
         ProjectileOptions = {"Health"},
+        PotionOptions = Globals.AllPotions,
+        SelectedPotions = {},
         SelectedProjectileOptions = {},
         ProjectileHealth = 150,
 
         InstantOpenCards = false,
         AutoOpenCards = false,
+
+        DisableEggAnimations = false,
         AutoOpenEggs = false,
+        
 
         FuseList = {},
         SelectedFuses = "Unknown",
@@ -1519,23 +1328,37 @@ local Features =
         end,
 
         TeleportEntity = function(self)
-            if (not Config.Connections.AutoCombatConnection) then return end
+            if (#Config.Farm.SelectedFarmEvents > 0) then
+                local events = workspace:GetAttribute("ActiveEvents") or {}
+                if (Utils:Contains(Config.Farm.SelectedFarmEvents, events) == false) then
+                    return
+                end
+            end
+
             local target = self:GetEntityByPriority()
             if (target == nil) then return end
-
-            DesyncLibrary.ShouldDesync = true
             local htbox = target:FindFirstChild("BrainrotHitbox") or target:FindFirstChild("Hitbox")
-            DesyncLibrary.DesyncPosition = htbox.CFrame
-            --hrp.CFrame = target:FindFirstChild("BrainrotHitbox").CFrame
+            Restores:UpdatePosition(htbox.CFrame)
         end,
 
         AttackEntity = function(self)
+            if (#Config.Farm.SelectedFarmEvents > 0) then
+                local events = workspace:GetAttribute("ActiveEvents") or {}
+                if (Utils:Contains(Config.Farm.SelectedFarmEvents, events) == false) then
+                    Restores:UpdateDesync("TeleportEntity", false)
+                    return
+                end
+            end
+
             local target = self:GetEntityByPriority()
             if target == nil then
+                Restores:UpdateDesync("TeleportEntity", false)
                 return
             end
 
-            Utils:EquipTool(true, false)
+            Restores:UpdateDesync("TeleportEntity", true)
+            self:TeleportEntity()
+            Utils:Tool(true, Utils:ReturnTool())
 
             combatevent:FireServer({
                 target.Name,
@@ -1657,7 +1480,7 @@ local Features =
                     if (not itemid) then continue end
                     
                     if (v:IsA("Tool") and plantData.ID == itemid) then
-                        v.Parent = lcl.Character
+                        Utils:Tool(true, v)
                         foundtool = true
                         break
                     end
@@ -1786,36 +1609,25 @@ local Features =
 
         AutoSellPlants = function(self)
             if (not Config.Sell.SellPlants or #Config.Sell.SelectedSellPlantRarities <= 0) then return end
-            if (self.Cache.AutoSellPlantsActive) then return end
-            self.Cache.AutoSellPlantsActive = true
-
             for i,v in pairs(lcl.Backpack:GetChildren()) do
-                if (not v:IsA("Tool")) then continue end
-                if (not v:GetAttribute("IsPlant")) then continue end
+                if (not v:IsA("Tool") or not v:GetAttribute("IsPlant")) then continue end
                 local model = v:FindFirstChildOfClass("Model") or nil
                 if (not model) then continue end
                 local rarity = model:GetAttribute("Rarity") or nil
                 if (not rarity) then continue end
-                if (Utils:Contains(Config.Sell.SelectedSellPlantRarities, rarity)) then
-                    Utils:Favorite(v, false)
-                else
+
+                if (not Utils:Contains(Config.Sell.SelectedSellPlantRarities, rarity)) then
                     Utils:Favorite(v, true)
                 end
             end
 
-            task.wait()
-            sellevent:FireServer(nil, nil, true)
-            self.Cache.AutoSellPlantsActive = false
+            task.wait(1)
+            sellevent:FireServer(nil, true, true)
         end
     },
 
     Collect =
     {
-        Cache =
-        {
-            --AutoCollectAndEquipActive = false,
-        },
-
         AutoCollectAndEquip = function(self)
             equipbest:Fire()
             if (Config.Settings.Notifications) then
@@ -1828,23 +1640,47 @@ local Features =
             if (not force) then
                 if (not path or path and path.Visible == false) then return end
             end
+
             local proxim = workspace.ScriptedMap.Event.EventRewards.TalkPart:FindFirstChild("ProximityPrompt")
             if (not proxim) then return end
 
             if (Config.Farm.AutoCombat) then Restores:RestoreCombatConn(false) end
+            Restores:UpdateDesync("ClaimEvent", true)
+            Restores:UpdatePosition(proxim.Parent.CFrame)
 
-            DesyncLibrary.ShouldDesync = true
-            DesyncLibrary.DesyncPosition = proxim.Parent.CFrame
-            task.wait(0.15)
+            task.wait(0.25)
             fireproximityprompt(proxim)
-            DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
-            DesyncLibrary.ShouldDesync = false
 
             if (Config.Settings.Notifications) then
                 Library:Notification("LUNOR » Claimed Event Reward's", 3, "success")
             end
 
+            Restores:UpdateDesync("ClaimEvent", false)
+
             if (Config.Farm.AutoCombat) then Restores:RestoreCombatConn(true) end
+        end,
+
+        AutoResetEvent = function(self)
+            local path = game.Players.LocalPlayer.PlayerGui.SurfaceGui.ReplayFrame
+            if (not path or path and path.Visible == false) then return end
+
+            
+            local money = ModuleManager:GetModule("PlayerData"):GetData().Data.Money
+            local canreset = (money >= 500000) and true or false
+
+            if (path and path.Visible == true and canreset) then
+                cardupdateevent:FireServer(
+                    "purchaseReplay"
+                )
+
+                task.wait(0.25)
+                self:AutoClaimEvent(true)
+
+                if (Config.Settings.Notifications) then
+                    Library:Notification("LUNOR » Event finished, purchasing reset", 3, "success")
+                end
+            end
+
         end,
     },
 
@@ -1937,6 +1773,40 @@ local Features =
 
     Items =
     {
+        UsePotions = function(self)
+            if (Config.Items.AutoPotions == false) then return end
+            if (#Config.Items.SelectedPotions == 0) then return end
+            local backpack = game.Players.LocalPlayer:FindFirstChild("Backpack")
+            --warn("Using Potions..")
+
+            for i,v in pairs(backpack:GetChildren()) do
+                local itemname = v:GetAttribute("ItemName") or nil
+                if (not itemname) then continue end
+                --warn(tostring(itemname))
+
+                if (v:IsA("Tool") and Utils:Contains(Config.Items.SelectedPotions, itemname)) then
+                    --warn("found")
+                    Restores:RestoreCombatConn(false)
+                    Utils:Tool(true, v)
+                    task.wait(0.1)
+                    useitemevent:FireServer({
+                        Toggle = true,
+                        Tool = game.Players.LocalPlayer.Character:FindFirstChild(v.Name),
+                    })
+                    task.wait(0.2)
+                    Utils:Tool(false)
+                    Restores:RestoreCombatConn(true)
+
+                    if (Config.Settings.Notifications) then
+                        Library:Notification("POTIONS » " .. v:GetAttribute("ItemName"), 3, "warning")
+                    end
+
+                    break
+                end
+            end
+
+            return true
+        end,
 
         ThrowProjectile = function(self)
             if (not Config.Items.AutoProjectiles) then return end
@@ -1955,37 +1825,40 @@ local Features =
 
             local rayOrigin = target:FindFirstChild("BrainrotHitbox") or target:FindFirstChild("Hitbox")
             if (not rayOrigin) then return end
-            DesyncLibrary.ShouldDesync = true
-            DesyncLibrary.DesyncPosition = rayOrigin.CFrame
+            
 
             for i, v in pairs(backpack:GetChildren()) do
                 if (not v:GetAttribute("Name")) then continue end
                 if (v:IsA("Tool") and Utils:Contains(Config.Items.SelectedProjectiles, v:GetAttribute("Name"))) then
                     Restores:RestoreCombatConn(false)
-                    Utils:EquipTool(false, true)
-                    task.wait(0.2)
-                    v.Parent = game.Players.LocalPlayer.Character
+                    Utils:Tool(true, v)
+                    Restores:UpdateDesync("ThrowProjectile", true)
+                    Restores:UpdatePosition(rayOrigin.CFrame)
                     table.insert(usedTools, v:GetAttribute("Name"))
-                    task.wait(0.1)
-                    DesyncLibrary.DesyncPosition = rayOrigin.CFrame
-
+                    task.wait(0.3)
+                    
+                    Restores:UpdatePosition(rayOrigin.CFrame)
                     useitemevent:FireServer({
                         Toggle = true,
                         Tool = game.Players.LocalPlayer.Character:FindFirstChild(v.Name),
                         Time = 0,
                         Pos = rayOrigin.Position,
                     })
+
+                    task.wait(0.1)
+
+                    break
                 end
-                task.wait()
             end
 
+            Restores:UpdateDesync("ThrowProjectile", false)
             Restores:RestoreCombatConn(true)
-            task.wait(0.1)
             if (#usedTools <= 0) then return end
 
-            Utils:EquipTool(false, true)
-            Library:Notification("GEARS » " .. table.concat(usedTools, " | "), 3, "warning")
-            DesyncLibrary.ShouldDesync = false
+            Utils:Tool(false)
+            if (Config.Settings.Notifications) then
+                Library:Notification("PROJECTILES » Threw " .. table.concat(usedTools, " | "), 3, "warning")
+            end
         end,
 
 
@@ -2006,13 +1879,8 @@ local Features =
                 local loweredname = string.lower(v.Name)
                 if (v:IsA("Tool") and string.find(loweredname, "pack")) then
                     Restores:RestoreCombatConn(false)
-                    if (equipped) then
-                        Utils:EquipTool(false, true)
-                    end
-
+                    Utils:Tool(true, v)
                     task.wait(0.1)
-
-                    v.Parent = game.Players.LocalPlayer.Character
                     equipped = v
                     break
                 end
@@ -2021,13 +1889,13 @@ local Features =
             if (not equipped or not string.find(string.lower(equipped.Name), "pack")) then return end
 
             packevent:FireServer()
+            task.wait(0.1)
+            Utils:Tool(false)
+            Restores:RestoreCombatConn(true)
 
             if (Config.Settings.Notifications) then
                 Library:Notification("CARDS » Opening " .. tostring(equipped.Name), 3, "success")
             end
-
-            task.wait(0.1)
-            Restores:RestoreCombatConn(true)
         end,
 
         EggFunc = nil,
@@ -2067,7 +1935,6 @@ local Features =
                 if (itemname and string.find(itemname, "Egg") and not string.find(itemname, "Eggplant")) then
                     eggremote:FireServer()
                     task.wait(0.1)
-                    Utils:EquipTool(false, true)
                     if (Config.Settings.Notifications) then
                         Library:Notification("EGGS » Opening " .. tostring(itemname or "Unknown"), 3, "success")
                     end
@@ -2082,19 +1949,16 @@ local Features =
                 for i,v in pairs(backpack:GetChildren()) do
                     if (not v or v and not v:GetAttribute("ItemName")) then continue end
                     if (v and v:GetAttribute("ItemName") and string.find(v:GetAttribute("ItemName"), "Egg") and not string.find(v:GetAttribute("ItemName"), "Eggplant")) then
-                        if (Config.Cooldowns.OpenEggsEvery == 15 or self.EggFunc == nil) then
-                            self:SkipEggs()
+                        if (Config.Cooldowns.OpenEggsEvery == 15 or self.EggFunc == nil and Config.Items.DisableEggAnimations) then
                             Config.Cooldowns.OpenEggsEvery = 8
                         end
 
                         Restores:RestoreCombatConn(false)
-                        Utils:EquipTool(false, true)
-                        task.wait(0.2)
-                        v.Parent = game.Players.LocalPlayer.Character
+                        Utils:Tool(true, v)
                         task.wait(0.2)
                         eggremote:FireServer()
                         task.wait(0.2)
-                        Utils:EquipTool(false, true)
+
                         if (Config.Settings.Notifications) then
                             Library:Notification("EGGS » Opening " .. tostring(v:GetAttribute("ItemName") or "Unknown"), 3, "success")
                         end
@@ -2110,12 +1974,8 @@ local Features =
             if (equipped) then return end
 
             -- couldnt find any eggs, set cooldown upto 15 + restore.
-            if (self.EggFunc) then
-                restorefunction(self.EggFunc)
-                self.EggFunc = nil
-                Config.Cooldowns.OpenEggsEvery = 15
-                return false
-            end
+            Config.Cooldowns.OpenEggsEvery = 15
+            return false
         end,
     },
 
@@ -2181,7 +2041,6 @@ Subsections.Combat:Toggle({
                         Config.Cooldowns.AttackCooldown = math.random(0.15, 0.23)
                         Config.Cooldowns.LastAttacked = currentTime
                         Features.Farm:AttackEntity()
-                        Features.Farm:TeleportEntity()
                     end
                 end)
             end
@@ -2189,10 +2048,8 @@ Subsections.Combat:Toggle({
             if (Config.Connections.AutoCombatConnection) then
                 Config.Connections.AutoCombatConnection:Disconnect()
                 Config.Connections.AutoCombatConnection = nil
-                DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
-                task.wait()
-                DesyncLibrary.ShouldDesync = false
-                Utils:EquipTool(false)
+                Restores:UpdateDesync("TeleportEntity", false)
+                Utils:Tool(false)
             end
         end
     end,
@@ -2205,6 +2062,18 @@ Subsections.Combat:Dropdown({
     Default = Config.Farm.SelectedPriority,
     Callback = function(value)
         Config.Farm.SelectedPriority = value
+    end,
+})
+
+-- events
+Subsections.Combat:Dropdown({
+    Name = "Only On Events",
+    Flag = "EventPriority",
+    Options = Config.Farm.FarmEvents, 
+    Default = Config.Farm.SelectedFarmEvents,
+    Max = 99,
+    Callback = function(value)
+        Config.Farm.SelectedFarmEvents = value
     end,
 })
 
@@ -2322,6 +2191,17 @@ Subsections.Collect:Toggle({
     Callback = function(value)
         Config.Collect.AutoClaimEvent = value
         if (value) then
+            if (not Config.Connections.RewardClaimConnection) then
+                local path = workspace.ScriptedMap.Event.TomadeFloor.GuiAttachment.Billboard:FindFirstChild("Checkmark")
+                if (not path) then return end
+                Config.Connections.RewardClaimConnection = path:GetPropertyChangedSignal("Visible"):Connect(function()
+                    if (path.Visible == true) then
+                        Config.Cooldowns.LastCollectedAward = tick()
+                        Features.Collect:AutoClaimEvent()
+                    end
+                end)
+            end
+
             if (not Config.Connections.AutoClaimEvent) then
                 Config.Connections.AutoClaimEvent = Services.RunService.Heartbeat:Connect(function()
                     local currentTime = tick()
@@ -2337,30 +2217,94 @@ Subsections.Collect:Toggle({
             if (Config.Connections.AutoClaimEvent) then
                 Config.Connections.AutoClaimEvent:Disconnect()
                 Config.Connections.AutoClaimEvent = nil
+                Restores:UpdateDesync("ClaimEvent", false)
+            end
+
+            if (Config.Connections.RewardClaimConnection) then
+                Config.Connections.RewardClaimConnection:Disconnect()
+                Config.Connections.RewardClaimConnection = nil
             end
         end
     end,
 })
 
-Subsections.Collect:Separator()
+-- AutoPurchaseRestart event toggle
+Subsections.Collect:Toggle({
+    Name = "Auto-Restart Event",
+    Flag = "AutoPurchaseRestart",
+    Default = Config.Collect.AutoPurchaseRestart,
+    Callback = function(value)
+        Config.Collect.AutoPurchaseRestart = value
+        if (value) then
 
-local rewardsparagraph = Subsections.Collect:Paragraph({
-    Title = "Statistics",
+            -- Property Changed Visible, and true send it forward.
+            if (not Config.Connections.AutoResetConnection) then
+                local path = game.Players.LocalPlayer.PlayerGui.SurfaceGui.ReplayFrame
+                Config.Connections.AutoResetConnection = path:GetPropertyChangedSignal("Visible"):Connect(function()
+                    if (path.Visible == true) then
+                        Features.Collect:AutoResetEvent()
+                        Config.Cooldowns.LastEventReset = tick()
+                    end
+                end)
+            end
+
+            if (not Config.Connections.AutoResetEvent) then
+                Config.Connections.AutoResetEvent = Services.RunService.Heartbeat:Connect(function()
+                    local currentTime = tick()
+                    if (currentTime - Config.Cooldowns.LastEventReset < Config.Cooldowns.EventResetEvery) then
+                        return
+                    end
+
+                    Config.Cooldowns.LastEventReset = currentTime
+                    Features.Collect:AutoResetEvent()
+                end)
+            end
+        else
+            if (Config.Connections.AutoResetEvent) then
+                Config.Connections.AutoResetEvent:Disconnect()
+                Config.Connections.AutoResetEvent = nil
+            end
+
+            if (Config.Connections.AutoResetConnection) then
+                Config.Connections.AutoResetConnection:Disconnect()
+                Config.Connections.AutoResetConnection = nil
+            end
+        end
+    end,
+})
+
+
+local rewardsparagraph = Sections.Info:Paragraph({
+    Title = "Event Details",
     Description = {
         {
             Text = "Target » None",
         },
         {
-            Text = "Progress » None",
+            Text = "Event Level » None",
         },
         {
-            Text = "Boss » None",
+            Text = "Boss Status » None",
         },
         {
-            Text = "Boost » None",
+            Text = "Server Version » " .. tostring(game.PlaceVersion),
         },
     },
     Position = "Center",
+})
+
+
+-- seperator
+Sections.Info:Separator()
+
+-- copy join link button
+Sections.Info:Button({
+    Name = "Copy Server Code",
+    Callback = function()
+        local script = 'local TeleportService = game:GetService("TeleportService")\nlocal player = game:GetService("Players").LocalPlayer\nTeleportService:TeleportToPlaceInstance(' .. tostring(game.PlaceId) .. ', "' .. tostring(game.JobId) .. '", player)'
+        setclipboard(script)
+        Library:Notification("LUNOR » Copied Join Link", 3, "success")
+    end,
 })
 
 -- Sell Brainrot
@@ -2418,6 +2362,7 @@ Subsections.Sell:Toggle({
     Callback = function(value)
         Config.Sell.SellPlants = value
         if (value) then
+            Config.Cooldowns.LastSoldPlants = nil
             if (not Config.Connections.AutoSellPlantConnection) then
                 Config.Connections.AutoSellPlantConnection = Services.RunService.Heartbeat:Connect(function()
                     local currentTime = tick()
@@ -2437,7 +2382,7 @@ Subsections.Sell:Toggle({
 })
 
 Subsections.Sell:Dropdown({
-    Name = "Keep Rarities",
+    Name = "Sell Rarities",
     Flag = "SellPlantRarities",
     Max = 99,
     Options = Config.Sell.SellPlantRarities, 
@@ -2772,6 +2717,7 @@ Subsections.Projectiles:Toggle({
             if (Config.Connections.ProjectileConnection) then
                 Config.Connections.ProjectileConnection:Disconnect()
                 Config.Connections.ProjectileConnection = nil
+                Restores:UpdateDesync("ThrowProjectile", false)
             end
         end
     end,
@@ -2825,6 +2771,52 @@ Subsections.Projectiles:Slider({
     end,
 })
 
+
+-- autopoints
+Subsections.Potions:Toggle({
+    Name = "Auto Potions",
+    Flag = "AutoPotions",
+    Default = Config.Items.AutoPotions,
+    Callback = function(value)
+        Config.Items.AutoPotions = value
+        Config.Cooldowns.LastUsedPotion = nil
+        if (value) then
+            if (not Config.Connections.AutoPotionConnection) then
+                Config.Connections.AutoPotionConnection = Services.RunService.Heartbeat:Connect(function()
+                    local currentTime = tick()
+                    if (Config.Cooldowns.LastUsedPotion == nil or currentTime - Config.Cooldowns.LastUsedPotion >= Config.Cooldowns.UsePotionEvery) then
+                        Config.Cooldowns.LastUsedPotion = currentTime
+                        Features.Items:UsePotions()
+                    end
+                end)
+            end
+        else
+            if (Config.Connections.AutoPotionConnection) then
+                Config.Connections.AutoPotionConnection:Disconnect()
+                Config.Connections.AutoPotionConnection = nil
+
+            end
+        end
+    end,
+})
+
+-- seperator
+Subsections.Potions:Separator()
+
+-- PotionOptions
+Subsections.Potions:Dropdown({
+    Name = "Select Potions",
+    Flag = "PotionOptions",
+    Max = 99,
+    Options = Config.Items.PotionOptions,
+    Default = Config.Items.SelectedPotions,
+    Callback = function(value)
+        Config.Items.SelectedPotions = value
+        Config.Cooldowns.LastUsedPotion = nil
+    end,
+})
+
+
 -- Cards
 Subsections.Cards:Toggle({
     Name = "Disable Animation",
@@ -2863,6 +2855,22 @@ Subsections.Cards:Toggle({
 })
 
 
+-- DisableEggAnimations
+Subsections.Eggs:Toggle({
+    Name = "Disable Animation",
+    Flag = "InstantOpenEggs",
+    Default = Config.Items.DisableEggAnimations,
+    Callback = function(value)
+        Config.Items.DisableEggAnimations = value
+        if (value and Features.Items.EggFunc == nil) then
+            Features.Items:SkipEggs()
+        elseif (not value and Features.Items.EggFunc ~= nil) then
+            restorefunction(Features.Items.EggFunc)
+            Features.Items.EggFunc = nil
+        end
+    end,
+})
+
 -- autoopeneggs
 Subsections.Eggs:Toggle({
     Name = "Auto-Open Eggs",
@@ -2873,7 +2881,6 @@ Subsections.Eggs:Toggle({
         Config.Cooldowns.LastOpenedEgg = nil
         if (value) then
             if (not Config.Connections.AutoOpenEggsConnection) then
-                Features.Items:SkipEggs()
                 Config.Connections.AutoOpenEggsConnection = Services.RunService.Heartbeat:Connect(function()
                     local currentTime = tick()
                     if (Config.Cooldowns.LastOpenedEgg == nil or currentTime - Config.Cooldowns.LastOpenedEgg >= Config.Cooldowns.OpenEggsEvery) then
@@ -2886,10 +2893,6 @@ Subsections.Eggs:Toggle({
             if (Config.Connections.AutoOpenEggsConnection) then
                 Config.Connections.AutoOpenEggsConnection:Disconnect()
                 Config.Connections.AutoOpenEggsConnection = nil
-                if (Features.Items.EggFunc ~= nil) then
-                    restorefunction(Features.Items.EggFunc)
-                    Features.Items.EggFunc = nil
-                end
             end
         end
     end,
@@ -2962,6 +2965,17 @@ Sections.Developer:Button({
     end,
 })
 
+-- seperator
+Sections.Developer:Separator()
+
+-- LogAllRequests
+Sections.Developer:Button({
+    Name = "Log All Requests",
+    Callback = function()
+        Restores:LogAllRequests()
+    end,
+})
+
 -- AutoClaimEvent(true)
 Sections.Developer:Button({
     Name = "AutoClaimEvent",
@@ -2969,6 +2983,7 @@ Sections.Developer:Button({
         Features.Collect:AutoClaimEvent(true)
     end,
 })
+
 
 -- Configs
 
@@ -2984,7 +2999,7 @@ local ConfigsModule =
     },
 
     GetAutoloadConfigName = function(self)
-        local filePath = Storage.ConfigsPath .. "/autoload.json"
+        local filePath = Storage.ConfigsPath .. "/autoload.lnr"
         if (isfile(filePath)) then
             local content = readfile(filePath)
             return content or nil
@@ -2996,8 +3011,8 @@ local ConfigsModule =
         self.Cache.Configs = {}
         local autoloadname = self:GetAutoloadConfigName()
         for _, file in pairs(listfiles(Storage.ConfigsPath)) do
-            if (file:match("%.json$")) then
-                local configName = file:match("([^/\\]+)%.json$")
+            if (file:match("%.lnr$")) then
+                local configName = file:match("([^/\\]+)%.lnr$")
 
                 if (configName and configName == autoloadname) then
                     configName = configName .. " [autoload]"
@@ -3033,7 +3048,7 @@ local ConfigsModule =
     end,
 
     ConfigExists = function(self, configName)
-        local filePath = Storage.ConfigsPath .. "/" .. configName .. ".json"
+        local filePath = Storage.ConfigsPath .. "/" .. configName .. ".lnr"
         return isfile(filePath)
     end,
 
@@ -3046,7 +3061,7 @@ local ConfigsModule =
         local cleanName = result
 
         local content = Library:GetConfig()
-        local filePath = Storage.ConfigsPath .. "/" .. cleanName .. ".json"
+        local filePath = Storage.ConfigsPath .. "/" .. cleanName .. ".lnr"
         
         local message = ""
         if (self:ConfigExists(cleanName)) then
@@ -3071,7 +3086,7 @@ local ConfigsModule =
             configName = autoloadname
         end
         
-        local filePath = Storage.ConfigsPath .. "/" .. configName .. ".json"
+        local filePath = Storage.ConfigsPath .. "/" .. configName .. ".lnr"
         if (isfile(filePath)) then
             local content = readfile(filePath)
             if (content) then
@@ -3097,7 +3112,7 @@ local ConfigsModule =
             return false, "Cannot delete Default config"
         end
         
-        local filePath = Storage.ConfigsPath .. "/" .. configName .. ".json"
+        local filePath = Storage.ConfigsPath .. "/" .. configName .. ".lnr"
         if (isfile(filePath)) then
             delfile(filePath)
             self:GetConfigurations()
@@ -3167,7 +3182,7 @@ local ConfigsModule =
     end,
 
     SetAutoload = function(self, configname)
-        local filePath = Storage.ConfigsPath .. "/" .. "autoload" .. ".json"
+        local filePath = Storage.ConfigsPath .. "/" .. "autoload" .. ".lnr"
         local content = readfile(filePath)
         
         local autoloadname = self:GetAutoloadConfigName()
@@ -3188,14 +3203,14 @@ local ConfigsModule =
     end,
 
     DoAutoload = function(self)
-        local filePath = Storage.ConfigsPath .. "/" .. "autoload" .. ".json"
+        local filePath = Storage.ConfigsPath .. "/" .. "autoload" .. ".lnr"
         if (not isfile(filePath)) then
             writefile(filePath, "")
             return
         end
 
         local configname = readfile(filePath)
-        if (not isfile(Storage.ConfigsPath .. "/" .. configname .. ".json")) then
+        if (not isfile(Storage.ConfigsPath .. "/" .. configname .. ".lnr")) then
             writefile(filePath, "")
             return
         end
@@ -3227,6 +3242,9 @@ local configlist = Sections.Configs:List({
         ConfigsModule.Cache.SelectedConfig = value
     end,
 })
+
+-- seperator
+Sections.Configs:Separator()
 
 Sections.Configs:Dropdown({
     Name = "Actions",
@@ -3331,6 +3349,15 @@ Sections.ShareConfigs:Button({
     end,
 })
 
+-- Tutorial button
+Sections.ShareConfigs:Button({
+    Name = "Tutorial",
+    Callback = function()
+        -- will add link opening
+    end,
+})
+
+
 
 local runtime =
 {
@@ -3338,8 +3365,7 @@ local runtime =
     {
         lasttarget = nil,
         lastlevel = nil,
-        lastuntillboss = nil,
-        lastboost = nil,
+        lastmoney = nil,
     },
 
     cooldowns =
@@ -3351,44 +3377,29 @@ local runtime =
     handle = function(self)
         local target = workspace.ScriptedMap.Event.HitListVisualizer.Hitbox.GuiAttachment.Billboard.Display.Text or "None"
         local level = ModuleManager:GetModule("PlayerData"):GetData().Data.ClaimedRewards.CardUpdateEvent or "None"
-        local untillboss = ModuleManager:GetModule("PlayerData"):GetData().Data.BrainrotsForBoss or "None"
-        local boost = ModuleManager:GetModule("PlayerData"):GetData().Data.Boost or "None"
-
-        if (self.cache.lasttarget == target and self.cache.lastlevel == level and self.cache.lastuntillboss == untillboss and self.cache.lastboost == boost) then return end
+        local money = ModuleManager:GetModule("PlayerData"):GetData().Data.Money
+        if (money > 50000 and Config.Collect.AutoPurchaseRestart == true) then money = true else money = false end
+        if (self.cache.lasttarget == target and self.cache.lastlevel == level and self.cache.lastmoney == money) then
+            return
+        end
 
         self.cache.lasttarget = target
         self.cache.lastlevel = level
-        self.cache.lastuntillboss = untillboss
-        self.cache.lastboost = boost
-        local bosspercentage = (untillboss / 500) * 100
-        bosspercentage = math.clamp(bosspercentage, 0, 100)
-        bosspercentage = math.floor(bosspercentage)
-
-        if (level and level == 20) then
-            local Event = game:GetService("ReplicatedStorage").Remotes.CardUpdateEvent
-            Event:FireServer(
-                "purchaseReplay"
-            )
-
-            task.wait(0.25)
-
-            Features.Collect:AutoClaimEvent(true)
-        end
-
+        self.cache.lastmoney = money
         rewardsparagraph:SetDescription(
         {
             {
                 Text = "Target » " .. (target or "None"),
             },
             {
-                Text = "Current Level » " .. (level or "None"),
+                Text = "Progression » " .. (level or "None") .. "/20",
             },
             {
-                Text = "Boss Status » " .. (bosspercentage or "None") .. "%",
+                Text = "Auto Restart » " .. tostring(money),
             },
             {
-                Text = "Currency Boost » " .. (boost or "None") .. "x",
-            },
+                Text = "Server Ver » " .. tostring(game.PlaceVersion),
+            }
         })
     end,
 }
@@ -3397,13 +3408,12 @@ Services.RunService.Heartbeat:Connect(function()
     local currentTime = tick()
     if (currentTime - runtime.cooldowns.lastupdate < runtime.cooldowns.updateevery) then
         return
+    else
+        runtime.cooldowns.lastupdate = currentTime
+        runtime:handle()
     end
-
-    runtime.cooldowns.lastupdate = currentTime
-    runtime:handle()
 end)
 
-Library:Notification("LUNOR » Loaded Successfully", 3, "success")
 
 Restores =
 {
@@ -3411,9 +3421,8 @@ Restores =
         if (not boolean and Config.Connections.AutoCombatConnection) then
             Config.Connections.AutoCombatConnection:Disconnect()
             Config.Connections.AutoCombatConnection = nil
-            DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
-            task.wait()
-            DesyncLibrary.ShouldDesync = false
+            Restores:UpdateDesync("TeleportEntity", false)
+            Utils:Tool(false)
             return
         elseif (boolean and not Config.Connections.AutoCombatConnection and Config.Farm.AutoCombat) then
             Config.Connections.AutoCombatConnection = Services.RunService.Heartbeat:Connect(function()
@@ -3422,14 +3431,59 @@ Restores =
                     Config.Cooldowns.AttackCooldown = math.random(0.15, 0.23)
                     Config.Cooldowns.LastAttacked = currentTime
                     Features.Farm:AttackEntity()
-                    Features.Farm:TeleportEntity()
+                    Restores:UpdateDesync("TeleportEntity", true)
                 end
             end)
             return
         end
     end,
+
+    DesyncCache =
+    {
+        Requests = {},
+        LastSendData = 0,
+        SendDataEvery = 5,
+    },
+
+    LogAllRequests = function(self)
+        warn("[ REQUESTS DATA ]")
+        
+        for i,v in pairs(self.DesyncCache.Requests) do
+            warn(i .. " » " .. tostring(v))
+        end
+
+        warn(" [ DESYNC DATA]")
+        warn("Desync Status » " .. tostring(DesyncLibrary.ShouldDesync))
+
+    end,
+
+
+    UpdatePosition = function(self, position)
+        if (not position or position == nil) then
+            return
+        end
+
+        DesyncLibrary.DesyncPosition = position
+    end,
+
+    UpdateDesync = function(self, identifier, boolean)
+        if (self.DesyncCache.Requests[identifier] == nil or self.DesyncCache.Requests[identifier] ~= boolean) then
+            self.DesyncCache.Requests[identifier] = boolean
+        end
+
+        if (Utils:Contains(self.DesyncCache.Requests, true)) then
+            DesyncLibrary.ShouldDesync = true
+            return true
+        else
+            DesyncLibrary.DesyncPosition = DesyncLibrary.RealPosition
+            task.wait()
+            DesyncLibrary.ShouldDesync = false
+            return false
+        end
+    end,
 }
 
 
-task.wait(1)
+repeat task.wait(1) until Storage.ConfigsPath ~= nil
 ConfigsModule:DoAutoload()
+Library:Notification("LUNOR » Loaded Successfully", 3, "success")
