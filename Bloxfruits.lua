@@ -872,7 +872,7 @@ function Library.Window(self, Options)
 	if Window.Logo then
 		local logoImage = Instance.new("ImageLabel")
 		logoImage.Name = "Logo"
-		logoImage.Image = Window.Logo
+		logoImage.Image = Window.Logo or "rbxassetid://0"
 		logoImage.BackgroundTransparency = 1
 		logoImage.ImageTransparency = 0.3 -- 70% visible
 		logoImage.Size = Library.UDim2(0, 25, 0, 25)
@@ -1386,7 +1386,7 @@ function Library.Window(self, Options)
         if (Tab.Icon) then
             tabbdcon = Instance.new("ImageLabel", atab)
             tabbdcon.Name = "tabbdcon"
-            tabbdcon.Image = Tab.Icon
+            tabbdcon.Image = Tab.Icon or "rbxassetid://0"
             tabbdcon.ImageColor3 = Color3.fromRGB(115, 115, 115)
             tabbdcon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             tabbdcon.BackgroundTransparency = 1
@@ -5978,7 +5978,7 @@ function Library.MobileButton(self, minimizelogo)
 
     local logoImage = Instance.new("ImageLabel")		
 	logoImage.Name = "Logo"
-	logoImage.Image = minimizelogo
+	logoImage.Image = minimizelogo or "rbxassetid://12187298715"
 	logoImage.BackgroundTransparency = 1
 	logoImage.ImageTransparency = 0.3 -- 70% visible
 	logoImage.Position = UDim2.fromScale(0.5, 0.5)
