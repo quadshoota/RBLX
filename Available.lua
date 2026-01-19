@@ -1,5 +1,5 @@
 local Available = {
-"Lunacy", "browser", "cloudfile"
+"Lunacy", "browser", "cloudfile", "options"
 }
  
 return Available
