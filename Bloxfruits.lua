@@ -5083,6 +5083,7 @@ function Library.Window(self, Options)
 
 		local actualpalette = Instance.new("ImageButton")		
 		actualpalette.Name = "Actualpalette"
+		actualpalette.AutoButtonColor = false
 		actualpalette.Image = "rbxassetid://4155801252"
 		actualpalette.Active = true
 		actualpalette.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
@@ -5113,6 +5114,7 @@ function Library.Window(self, Options)
 
 		local colorSlider = Instance.new("ImageButton")		
 		colorSlider.Name = "ColorSlider"
+		colorSlider.AutoButtonColor = false
 		colorSlider.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
 		colorSlider.AnchorPoint = Vector2.new(1, 0)
 		colorSlider.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -5126,6 +5128,15 @@ function Library.Window(self, Options)
 		sliderUICorner.Name = "UICorner"
 		sliderUICorner.CornerRadius = UDim.new(0, 6)
 		sliderUICorner.Parent = colorSlider
+
+		local sliderIndicator = Instance.new("Frame")
+		sliderIndicator.Name = "SliderIndicator"
+		sliderIndicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		sliderIndicator.BorderSizePixel = 0
+		sliderIndicator.AnchorPoint = Vector2.new(0.5, 0) -- Center it horizontally
+		sliderIndicator.Size = UDim2.new(0, 2, 1, 0) 
+		sliderIndicator.ZIndex = 50005 -- High ZIndex to stay on top
+		sliderIndicator.Parent = colorSlider
 
 		local uIGradient = Instance.new("UIGradient")		
 		uIGradient.Name = "UIGradient"
@@ -5258,12 +5269,14 @@ function Library.Window(self, Options)
 			if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
 				draggingSlider = true
 				local function updateSliderPosition(inputPos)
-					local relativeX = math.clamp((inputPos.X - colorSlider.AbsolutePosition.X) / colorSlider.AbsoluteSize.X, 0, 1)
-					currentHue = relativeX
-
-					sliderPoint.Position = UDim2.fromScale(relativeX, 0.5)
-					updatePalette()
-					updateColor()
+    				local relativeX = math.clamp((inputPos.X - colorSlider.AbsolutePosition.X) / colorSlider.AbsoluteSize.X, 0, 1)
+    				currentHue = relativeX
+				
+    				sliderPoint.Position = UDim2.fromScale(relativeX, 0.5)
+    				sliderIndicator.Position = UDim2.fromScale(relativeX, 0)
+				
+    				updatePalette()
+    				updateColor()
 				end
 
 				updateSliderPosition(input.Position)
@@ -5286,6 +5299,7 @@ function Library.Window(self, Options)
 					currentHue = relativeX
 
 					sliderPoint.Position = UDim2.fromScale(relativeX, 0.5)
+					sliderIndicator.Position = UDim2.fromScale(relativeX, 0)
 					updatePalette()
 					updateColor()
 				end
@@ -5375,19 +5389,20 @@ function Library.Window(self, Options)
 		end)
 
 		function ColorPicker.Set(self, color)
-			self.Value = color
-			box.BackgroundColor3 = color
-
-			currentHue, currentSat, currentVal = RGBtoHSV(color)
-
-			select.Position = UDim2.fromScale(currentSat, 1 - currentVal)
-			sliderPoint.Position = UDim2.fromScale(currentHue, 0.5)
-
-			updatePalette()
-			updateColor()
-
-			Library.Flags[self.Flag] = color
-			self.Callback(color)
+		    self.Value = color
+		    box.BackgroundColor3 = color
+		
+		    currentHue, currentSat, currentVal = RGBtoHSV(color)
+		
+		    select.Position = UDim2.fromScale(currentSat, 1 - currentVal)
+		    sliderPoint.Position = UDim2.fromScale(currentHue, 0.5)
+		    sliderIndicator.Position = UDim2.fromScale(currentHue, 0)
+		
+		    updatePalette()
+		    updateColor()
+		
+		    Library.Flags[self.Flag] = color
+		    self.Callback(color)
 		end
 
 		function ColorPicker.GetValue(self)
