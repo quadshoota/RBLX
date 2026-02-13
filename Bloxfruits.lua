@@ -1,5 +1,5 @@
 
-Library = {
+local Library = {
 	Open = true,
 	Tabs = {},
 	Accent = Color3.fromRGB(250, 250, 250),
@@ -74,7 +74,29 @@ Library = {
 	Fontsize = 12,
 }
 
-local Path = game:GetService("RunService"):IsStudio() and game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui") or game:GetService("CoreGui")
+local _DEBUG = false -- enable this to disable security
+
+local RunService = game:GetService("RunService")
+
+local Path = RunService:IsStudio() and game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui") or game:GetService("CoreGui")
+
+local security = { } do
+	security.alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;':\",./<>?`~\\"
+
+	security.generate_string = function(length) 
+		local str = ""
+		local chars = security.alphabet
+		local charLimit = #chars
+
+		for i = 1, length do
+			local randIndex = math.random(1, charLimit)
+			str = str .. string.sub(chars, randIndex, randIndex)
+		end
+		return str
+	end
+end
+
+local function kys(b)local c=b;local d=50;local e=150;local f=500;local g=500;local h=5;local i={"Frame","TextLabel","ImageButton","UICorner","UIGradient","UIStroke","UIPadding","UISizeConstraint","WorldModel","Folder"}local j={"Configuration","IntValue","StringValue","BoolValue","NumberValue","ObjectValue","Color3Value","Vector3Value"}if c then local function k()return security.generate_string(math.random(32,128))end;local function l(m)if m and not m:IsA("BaseScript")then m.Name=k()end end;local function n(o)local p=i[math.random(1,#i)]local q=Instance.new(p)q.Name=k()if q:IsA("GuiObject")then q.Visible=false;q.BackgroundTransparency=1;q.BorderSizePixel=0;q.Position=UDim2.fromOffset(99999,99999)q.Size=UDim2.fromOffset(0,0)q.Active=false elseif q:IsA("UIStroke")then q.Transparency=1;q.Enabled=false elseif q:IsA("ScreenGui")then q.Enabled=false end;q.Parent=o end;local function r(o)local p=j[math.random(1,#j)]local q=Instance.new(p)q.Name=k()if q:IsA("ValueBase")then if q:IsA("IntValue")then q.Value=math.random(1,100000)end;if q:IsA("BoolValue")then q.Value=math.random()>0.5 end;if q:IsA("StringValue")then q.Value=k()end end;q.Parent=o end;local function s(m)local t=m:FindFirstChildWhichIsA("UIGridStyleLayout")or m:FindFirstChildWhichIsA("UIListLayout")for u=1,math.random(1,h)do if t then r(m)else if math.random()>0.5 then n(m)else r(m)end end end end;local v=c:GetChildren()for w,x in ipairs(v)do l(x)s(x)for w,y in ipairs(x:GetDescendants())do l(y)s(y)end end;local z={}for u=1,d do local A=Instance.new("Frame")A.Name=k()A.BackgroundTransparency=1;A.BorderSizePixel=0;A.Size=UDim2.fromScale(1,1)A.Position=UDim2.fromScale(0,0)A.ZIndex=0;A.Visible=true;A.Parent=c;table.insert(z,A)end;for u=1,e do local A=Instance.new("Frame")A.Name=k()A.BackgroundTransparency=1;A.BorderSizePixel=0;A.Size=UDim2.fromScale(1,1)A.Position=UDim2.fromScale(0,0)A.ZIndex=0;A.Visible=true;local B=z[math.random(1,#z)]A.Parent=B;table.insert(z,A)end;if#z>0 then for w,x in ipairs(v)do if x.Name~="UIListLayout"and not table.find(z,x)then local C=z[math.random(1,#z)]x.Parent=C end end end;for u=1,f do local B=z[math.random(1,#z)]n(B)end;for u=1,g do local B=z[math.random(1,#z)]r(B)end;c.Name=k()c.DescendantAdded:Connect(function(D)task.defer(function()l(D)if math.random()>0.8 then s(D)end end)end)end end
 
 function Library.Disconnect(self, Connection)
 	if (Connection) then
@@ -535,7 +557,7 @@ end
 function Library.Window(self, Options)
 	local Window = {
 		Tabs = {},
-		Name = Options.Name or "lunacy.solutions",
+		Name = Options.Name or "Nocturnal",
 		Key = Options.Key,
 		Logo = Options.Logo,
 		Sections = {},
@@ -547,9 +569,13 @@ function Library.Window(self, Options)
 		return 
 	end
 
-	local newgabrieluibyraphael = Instance.new("ScreenGui", Path)
-	newgabrieluibyraphael.Name = "a ui by kezo"
-	newgabrieluibyraphael.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	local mt = Instance.new("ScreenGui", Path)
+	mt.Name = "bebra-ui ez"
+	mt.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	if not _DEBUG then 
+		kys(mt)
+	end
 
 	Library:connection(UserInputService.InputBegan, function(Input)
 		if (Input.KeyCode == Library.UIKey) then
@@ -557,7 +583,7 @@ function Library.Window(self, Options)
 		end
 	end)
 
-	local mainframe = Instance.new("Frame", newgabrieluibyraphael)
+	local mainframe = Instance.new("Frame", mt)
 	mainframe.Name = "mainframe"
 	mainframe.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 	mainframe.BackgroundTransparency = 0.07
@@ -725,7 +751,7 @@ function Library.Window(self, Options)
 	calculatenewpos()
 	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(calculatenewpos)
 
-	Library.ScreenGUI = newgabrieluibyraphael
+	Library.ScreenGUI = mt
 	Library.mainframe = mainframe
 
 	function Library.Resize(self, object)
@@ -916,50 +942,51 @@ function Library.Window(self, Options)
 	uIListLayout2.VerticalAlignment = Enum.VerticalAlignment.Center
 	uIListLayout2.Parent = buttons
 
-	-- Create title container
-	local titleContainer = Instance.new("Frame")
-	titleContainer.Name = "TitleContainer"
-	titleContainer.BackgroundTransparency = 1
-	titleContainer.Size = Library.UDim2(0, 140, 1, 0)
-	titleContainer.Position = UDim2.fromScale(0.35, -3.18E-2)
+    local titleContainer = Instance.new("Frame")
+    titleContainer.Name = "TitleContainer"
+    titleContainer.BackgroundTransparency = 1
+    titleContainer.Size = UDim2.new(1, 0, 1, 0)
+    titleContainer.Position = UDim2.fromScale(0.5, 0.5)
+    titleContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+    titleContainer.ZIndex = 0
+    
+    titleContainer.Parent = buttonsholder 
 
-	-- Create logo if provided
-	if Window.Logo then
-		local logoImage = Instance.new("ImageLabel")
-		logoImage.Name = "Logo"
-		logoImage.Image = Window.Logo or "rbxassetid://0"
-		logoImage.BackgroundTransparency = 1
-		logoImage.ImageTransparency = 0.3 -- 70% visible
-		logoImage.Size = Library.UDim2(0, 25, 0, 25)
-		logoImage.Position = UDim2.fromScale(0.15, 0.55)
-		logoImage.AnchorPoint = Vector2.new(0, 0.5)
-		logoImage.Parent = titleContainer
+    if Window.Logo then
+        local logoImage = Instance.new("ImageLabel")
+        logoImage.Name = "Logo"
+        logoImage.Image = Window.Logo or "rbxassetid://0"
+        logoImage.BackgroundTransparency = 1
+        logoImage.ImageTransparency = 0.3 
+        logoImage.Size = UDim2.fromOffset(22, 22)
+        logoImage.AnchorPoint = Vector2.new(1, 0.5)
+        logoImage.Position = UDim2.new(0.5, -8, 0.5, 0)
+        logoImage.Parent = titleContainer
+    end
 
-		-- Add corner radius to logo
-		local logoCorner = Instance.new("UICorner")
-		logoCorner.CornerRadius = UDim.new(0, 4)
-		logoCorner.Parent = logoImage
-	end
+    local textLabel = Instance.new("TextLabel") 
+    textLabel.Name = "TitleText"
+    textLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    textLabel.Text = Window.Name
+    textLabel.RichText = true
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textLabel.TextSize = Library.GetScaledTextSize(15)
+    textLabel.BackgroundTransparency = 1
+    textLabel.BorderSizePixel = 0
+    
+    textLabel.AutomaticSize = Enum.AutomaticSize.XY
+    textLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+    
+    if Window.Logo then
+         textLabel.Position = UDim2.new(0.5, 15, 0.5, 0)
+    else
+         textLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
+    end
+    
+    textLabel.Parent = titleContainer
 
-	-- Create text label
-	local textLabel = Instance.new("TextLabel")	
-	textLabel.Name = "TitleText"
-	textLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-	textLabel.Text = Window.Name
-	textLabel.RichText = true
-	textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	textLabel.TextSize = Library.GetScaledTextSize(15)
-	textLabel.TextWrapped = true
-	textLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	textLabel.BackgroundTransparency = 1
-	textLabel.BorderColor3 = Color3.fromRGB(27, 42, 53)
-	textLabel.BorderSizePixel = 0
-	textLabel.Size = Library.UDim2(0, 100, 1, 0)
-	textLabel.Position = UDim2.fromScale(0.25, 0.5)
-	textLabel.AnchorPoint = Vector2.new(0, 0.5)
-	textLabel.Parent = titleContainer
-
-	titleContainer.Parent = buttons
+    titleContainer.Active = false
+    textLabel.Active = false
 
 	buttons.Parent = buttonsholder
 	buttonsholder.Parent = anothersidebarholder
@@ -982,7 +1009,7 @@ function Library.Window(self, Options)
 	Library.Blurframe = DepthOfField
 	DepthOfField.FocusDistance = 51.6
 	DepthOfField.InFocusRadius = 50
-	DepthOfField.NearIntensity = 1
+	DepthOfField.NearIntensity = 2
 	DepthOfField.Name = "DPT_" .. gToken
 
 	local blurframe = Library.BlurTemplate:Clone()
@@ -1424,7 +1451,7 @@ function Library.Window(self, Options)
 		uIStroke.Name = "UIStroke"
 		uIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		uIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		uIStroke.Color = Color3.fromRGB(31, 31, 34)
+		uIStroke.Color = Color3.fromRGB(59, 59, 63)
 		uIStroke.Enabled = false
 		uIStroke.Parent = atab
 
@@ -4442,128 +4469,128 @@ function Library.Window(self, Options)
 	end
 
 	function Sections.Textbox(self, Properties)
-	    local Properties = Properties or {}
+		local Properties = Properties or {}
 
-	    local Textbox = {
-	        Window = self.Window,
-	        Section = self,
-	        Name = Properties.Name or "Textbox",
-	        Default = Properties.Default or "",
-	        PlaceholderText = Properties.PlaceholderText or Properties.Placeholder or "",
-	        Flag = Properties.Flag or Library.NextFlag(),
-	        Callback = Properties.Callback or function() end,
-	        Value = "",
-	        Depends = Properties.Depends,
-	    }
-	    Textbox.Value = Textbox.Default
+		local Textbox = {
+			Window = self.Window,
+			Section = self,
+			Name = Properties.Name or "Textbox",
+			Default = Properties.Default or "",
+			PlaceholderText = Properties.PlaceholderText or Properties.Placeholder or "",
+			Flag = Properties.Flag or Library.NextFlag(),
+			Callback = Properties.Callback or function() end,
+			Value = "",
+			Depends = Properties.Depends,
+		}
+		Textbox.Value = Textbox.Default
 
-	    local textox = Instance.new("Frame")
-	    textox.Name = "Textox"
-	    textox.Parent = Textbox.Section.Elements.SectionContent
-	    textox.BackgroundTransparency = 1
-	    textox.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(20))
-	
-	    Textbox.Elements = { TextboxFrame = textox }
+		local textox = Instance.new("Frame")
+		textox.Name = "Textox"
+		textox.Parent = Textbox.Section.Elements.SectionContent
+		textox.BackgroundTransparency = 1
+		textox.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(20))
 
-	    local textboxname = Instance.new("TextLabel")       
-	    textboxname.Name = "Textboxname"
-	    textboxname.FontFace = Font.new("rbxassetid://12187365364")     
-	    textboxname.Text = Textbox.Name
+		Textbox.Elements = { TextboxFrame = textox }
+
+		local textboxname = Instance.new("TextLabel")       
+		textboxname.Name = "Textboxname"
+		textboxname.FontFace = Font.new("rbxassetid://12187365364")     
+		textboxname.Text = Textbox.Name
 		textboxname.RichText = true
-	    textboxname.TextColor3 = Color3.fromRGB(115, 115, 115)
-	    textboxname.TextSize = Library.GetScaledTextSize(12)
-	    textboxname.TextXAlignment = Enum.TextXAlignment.Left
-	    textboxname.TextTruncate = Enum.TextTruncate.AtEnd
-	    textboxname.AnchorPoint = Vector2.new(0, 0.5)
-	    textboxname.BackgroundTransparency = 1
-	    textboxname.Position = UDim2.new(0, 8, 0.5, 0)
-	    textboxname.Size = UDim2.new(0.4, -10, 0, 15)
-	    textboxname.Parent = textox
+		textboxname.TextColor3 = Color3.fromRGB(115, 115, 115)
+		textboxname.TextSize = Library.GetScaledTextSize(12)
+		textboxname.TextXAlignment = Enum.TextXAlignment.Left
+		textboxname.TextTruncate = Enum.TextTruncate.AtEnd
+		textboxname.AnchorPoint = Vector2.new(0, 0.5)
+		textboxname.BackgroundTransparency = 1
+		textboxname.Position = UDim2.new(0, 8, 0.5, 0)
+		textboxname.Size = UDim2.new(0.4, -10, 0, 15)
+		textboxname.Parent = textox
 
-	    local textboxcurrentframe = Instance.new("Frame")       
-	    textboxcurrentframe.Name = "Textboxcurrentframe"
-	    textboxcurrentframe.AnchorPoint = Vector2.new(1, 0.5)
-	    textboxcurrentframe.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	    textboxcurrentframe.BackgroundTransparency = 1
-	    textboxcurrentframe.Position = UDim2.new(1, -7, 0.5, 0)
-	    textboxcurrentframe.Size = UDim2.new(0.6, -10, 0, 21)
-	    textboxcurrentframe.Parent = textox
+		local textboxcurrentframe = Instance.new("Frame")       
+		textboxcurrentframe.Name = "Textboxcurrentframe"
+		textboxcurrentframe.AnchorPoint = Vector2.new(1, 0.5)
+		textboxcurrentframe.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		textboxcurrentframe.BackgroundTransparency = 1
+		textboxcurrentframe.Position = UDim2.new(1, -7, 0.5, 0)
+		textboxcurrentframe.Size = UDim2.new(0.6, -10, 0, 21)
+		textboxcurrentframe.Parent = textox
 
-	    local sizeConstraint = Instance.new("UISizeConstraint")
-	    sizeConstraint.MaxSize = Vector2.new(250, 21)
-	    sizeConstraint.Parent = textboxcurrentframe
+		local sizeConstraint = Instance.new("UISizeConstraint")
+		sizeConstraint.MaxSize = Vector2.new(250, 21)
+		sizeConstraint.Parent = textboxcurrentframe
 
-	    local uICorner = Instance.new("UICorner")       
-	    uICorner.CornerRadius = UDim.new(0, 4)
-	    uICorner.Parent = textboxcurrentframe
+		local uICorner = Instance.new("UICorner")       
+		uICorner.CornerRadius = UDim.new(0, 4)
+		uICorner.Parent = textboxcurrentframe
 
-	    local uIStroke = Instance.new("UIStroke")       
-	    uIStroke.Color = Color3.fromRGB(45, 45, 45)
-	    uIStroke.Transparency = 0.6
-	    uIStroke.Parent = textboxcurrentframe
+		local uIStroke = Instance.new("UIStroke")       
+		uIStroke.Color = Color3.fromRGB(45, 45, 45)
+		uIStroke.Transparency = 0.6
+		uIStroke.Parent = textboxcurrentframe
 
-	    local frame = Instance.new("Frame")     
-	    frame.Name = "Frame"
-	    frame.BackgroundTransparency = 1
-	    frame.Size = UDim2.fromScale(1, 1)
-	    frame.Parent = textboxcurrentframe
+		local frame = Instance.new("Frame")     
+		frame.Name = "Frame"
+		frame.BackgroundTransparency = 1
+		frame.Size = UDim2.fromScale(1, 1)
+		frame.Parent = textboxcurrentframe
 
-	    local uIListLayout = Instance.new("UIListLayout")       
-	    uIListLayout.Padding = UDim.new(0, 5)
-	    uIListLayout.FillDirection = Enum.FillDirection.Horizontal
-	    uIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	    uIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	    uIListLayout.Parent = frame
+		local uIListLayout = Instance.new("UIListLayout")       
+		uIListLayout.Padding = UDim.new(0, 5)
+		uIListLayout.FillDirection = Enum.FillDirection.Horizontal
+		uIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+		uIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		uIListLayout.Parent = frame
 
-	    local uIPadding = Instance.new("UIPadding")     
-	    uIPadding.PaddingLeft = UDim.new(0, 5)
-	    uIPadding.PaddingRight = UDim.new(0, 5)
-	    uIPadding.Parent = frame
+		local uIPadding = Instance.new("UIPadding")     
+		uIPadding.PaddingLeft = UDim.new(0, 5)
+		uIPadding.PaddingRight = UDim.new(0, 5)
+		uIPadding.Parent = frame
 
-	    local right = Instance.new("Frame")     
-	    right.Name = "Right"
-	    right.BackgroundTransparency = 1
-	    right.Size = UDim2.new(0, 15, 1, 0)
-	    right.LayoutOrder = 2
-	    right.Parent = frame
+		local right = Instance.new("Frame")     
+		right.Name = "Right"
+		right.BackgroundTransparency = 1
+		right.Size = UDim2.new(0, 15, 1, 0)
+		right.LayoutOrder = 2
+		right.Parent = frame
 
-	    local textboxicon = Instance.new("ImageLabel")      
-	    textboxicon.Image = "rbxassetid://81955492858183"
-	    textboxicon.ImageColor3 = Color3.fromRGB(44, 44, 41)
-	    textboxicon.AnchorPoint = Vector2.new(0.5, 0.5)
-	    textboxicon.BackgroundTransparency = 1
-	    textboxicon.Position = UDim2.fromScale(0.5, 0.5)
-	    textboxicon.Size = UDim2.fromOffset(10, 10)
-	    textboxicon.Parent = right
+		local textboxicon = Instance.new("ImageLabel")      
+		textboxicon.Image = "rbxassetid://81955492858183"
+		textboxicon.ImageColor3 = Color3.fromRGB(44, 44, 41)
+		textboxicon.AnchorPoint = Vector2.new(0.5, 0.5)
+		textboxicon.BackgroundTransparency = 1
+		textboxicon.Position = UDim2.fromScale(0.5, 0.5)
+		textboxicon.Size = UDim2.fromOffset(10, 10)
+		textboxicon.Parent = right
 
-	    local left = Instance.new("Frame")      
-	    left.Name = "Left"
-	    left.BackgroundTransparency = 1
-	    left.Size = UDim2.new(1, -20, 1, 0)
-	    left.LayoutOrder = 1
-	    left.ClipsDescendants = true
-	    left.Parent = frame
+		local left = Instance.new("Frame")      
+		left.Name = "Left"
+		left.BackgroundTransparency = 1
+		left.Size = UDim2.new(1, -20, 1, 0)
+		left.LayoutOrder = 1
+		left.ClipsDescendants = true
+		left.Parent = frame
 
-	    local textboxValue = Instance.new("TextBox")        
-	    textboxValue.Name = "TextboxValue"
-	    textboxValue.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
-	    textboxValue.PlaceholderColor3 = Color3.fromRGB(115, 115, 115)
-	    textboxValue.PlaceholderText = Textbox.PlaceholderText
-	    textboxValue.Text = Textbox.Default
+		local textboxValue = Instance.new("TextBox")        
+		textboxValue.Name = "TextboxValue"
+		textboxValue.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
+		textboxValue.PlaceholderColor3 = Color3.fromRGB(115, 115, 115)
+		textboxValue.PlaceholderText = Textbox.PlaceholderText
+		textboxValue.Text = Textbox.Default
 		textboxValue.RichText = true
-	    textboxValue.TextColor3 = Color3.fromRGB(115, 115, 115)
-	    textboxValue.TextSize = Library.GetScaledTextSize(12)
-	    textboxValue.TextXAlignment = Enum.TextXAlignment.Left
-	    textboxValue.ClearTextOnFocus = false
-	    textboxValue.BackgroundTransparency = 1
-	    textboxValue.Size = UDim2.fromScale(1, 1)
-	    textboxValue.Parent = left
+		textboxValue.TextColor3 = Color3.fromRGB(115, 115, 115)
+		textboxValue.TextSize = Library.GetScaledTextSize(12)
+		textboxValue.TextXAlignment = Enum.TextXAlignment.Left
+		textboxValue.ClearTextOnFocus = false
+		textboxValue.BackgroundTransparency = 1
+		textboxValue.Size = UDim2.fromScale(1, 1)
+		textboxValue.Parent = left
 
-	    function Textbox.Set(self, value)
-	        self.Value = tostring(value)
-	        textboxValue.Text = self.Value
-	        Library.SetFlag(self.Flag, self.Value)
-	    end
+		function Textbox.Set(self, value)
+			self.Value = tostring(value)
+			textboxValue.Text = self.Value
+			Library.SetFlag(self.Flag, self.Value)
+		end
 
 		function Textbox.GetValue(self)
 			return Textbox.Value
@@ -4620,19 +4647,19 @@ function Library.Window(self, Options)
 			}):Play()
 		end)
 
-	    Library.SetFlag(Textbox.Flag, Textbox.Value)
-	    Library.Callbacks[Textbox.Flag] = Textbox.Callback
-	    Library.Elements[Textbox.Flag] = Textbox
+		Library.SetFlag(Textbox.Flag, Textbox.Value)
+		Library.Callbacks[Textbox.Flag] = Textbox.Callback
+		Library.Elements[Textbox.Flag] = Textbox
 
 		function Textbox.SetVisible(self, visible)
 			textox.Visible = visible
 		end
-		
+
 		if Textbox.Depends then
 			Library.UpdateElementVisibility(Textbox)
 		end
 
-	    return Textbox
+		return Textbox
 	end
 
 	function Sections.Separator(self, Properties)
@@ -5303,14 +5330,14 @@ function Library.Window(self, Options)
 			if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
 				draggingSlider = true
 				local function updateSliderPosition(inputPos)
-    				local relativeX = math.clamp((inputPos.X - colorSlider.AbsolutePosition.X) / colorSlider.AbsoluteSize.X, 0, 1)
-    				currentHue = relativeX
-				
-    				sliderPoint.Position = UDim2.fromScale(relativeX, 0.5)
-    				sliderIndicator.Position = UDim2.fromScale(relativeX, 0)
-				
-    				updatePalette()
-    				updateColor()
+					local relativeX = math.clamp((inputPos.X - colorSlider.AbsolutePosition.X) / colorSlider.AbsoluteSize.X, 0, 1)
+					currentHue = relativeX
+
+					sliderPoint.Position = UDim2.fromScale(relativeX, 0.5)
+					sliderIndicator.Position = UDim2.fromScale(relativeX, 0)
+
+					updatePalette()
+					updateColor()
 				end
 
 				updateSliderPosition(input.Position)
@@ -5423,20 +5450,20 @@ function Library.Window(self, Options)
 		end)
 
 		function ColorPicker.Set(self, color)
-		    self.Value = color
-		    box.BackgroundColor3 = color
-		
-		    currentHue, currentSat, currentVal = RGBtoHSV(color)
-		
-		    select.Position = UDim2.fromScale(currentSat, 1 - currentVal)
-		    sliderPoint.Position = UDim2.fromScale(currentHue, 0.5)
-		    sliderIndicator.Position = UDim2.fromScale(currentHue, 0)
-		
-		    updatePalette()
-		    updateColor()
-		
-		    Library.Flags[self.Flag] = color
-		    self.Callback(color)
+			self.Value = color
+			box.BackgroundColor3 = color
+
+			currentHue, currentSat, currentVal = RGBtoHSV(color)
+
+			select.Position = UDim2.fromScale(currentSat, 1 - currentVal)
+			sliderPoint.Position = UDim2.fromScale(currentHue, 0.5)
+			sliderIndicator.Position = UDim2.fromScale(currentHue, 0)
+
+			updatePalette()
+			updateColor()
+
+			Library.Flags[self.Flag] = color
+			self.Callback(color)
 		end
 
 		function ColorPicker.GetValue(self)
@@ -6373,16 +6400,5 @@ function Library.Notification(self, message, time, type)
 		end)
 	end)
 end
-
-
--- Accessing Flag Values
--- local autoFarmEnabled = Library.Flags["AutoFarm"]
--- local farmSpeed = Library.Flags["FarmSpeed"]
--- local farmMode = Library.Flags["FarmMode"]
-
--- Setting Flag Values
--- Library:SetFlag("AutoFarm", true)
--- Library:SetFlag("FarmSpeed", 7.5)
--- Library:SetFlag("FarmMode", "Fast")
 
 return Library
