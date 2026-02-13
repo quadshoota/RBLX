@@ -604,7 +604,7 @@ function Library.Window(self, Options)
 			maxSize = originalSize * 1.0
 		end
 
-		return math.clamp(math.floor(finalSize + 0.5), minSize, maxSize)
+		return math.round(math.clamp(math.floor(finalSize + 0.5), minSize, maxSize))
 	end
 
 	function Library.GetSizeScaled(originalUDim2, customScale)
@@ -946,6 +946,7 @@ function Library.Window(self, Options)
 	textLabel.Name = "TitleText"
 	textLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
 	textLabel.Text = Window.Name
+	textLabel.RichText = true
 	textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	textLabel.TextSize = Library.GetScaledTextSize(15)
 	textLabel.TextWrapped = true
@@ -1280,6 +1281,7 @@ function Library.Window(self, Options)
 	searchipnut.FontFace = Font.new("rbxassetid://12187365364")	
 	searchipnut.PlaceholderText = "Search..."
 	searchipnut.Text = ""
+	searchipnut.RichText = true
 	searchipnut.TextColor3 = Color3.fromRGB(255, 255, 255)
 	searchipnut.TextSize = Library.GetScaledTextSize(12)
 	searchipnut.TextXAlignment = Enum.TextXAlignment.Left
@@ -1403,6 +1405,7 @@ function Library.Window(self, Options)
 		atab.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")		
 		atab.Text = ""
 		atab.TextColor3 = Color3.fromRGB(0, 0, 0)
+		atab.RichText = true
 		atab.TextSize = Library.GetScaledTextSize(14)
 		atab.AutoButtonColor = false
 		atab.BackgroundColor3 = Color3.fromRGB(39, 39, 42)
@@ -1455,6 +1458,7 @@ function Library.Window(self, Options)
 		tabnme.Name = "TextLabel"
 		tabnme.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 		tabnme.Text = Tab.Name
+		tabnme.RichText = true
 		tabnme.TextColor3 = Color3.fromRGB(115, 115, 115)
 		tabnme.TextSize = Library.GetScaledTextSize(12)
 		tabnme.TextTruncate = Enum.TextTruncate.AtEnd
@@ -1701,6 +1705,7 @@ function Library.Window(self, Options)
 		local minimizeButton = Instance.new("TextButton")
 		minimizeButton.Name = "MinimizeButton"
 		minimizeButton.Text = ""
+		minimizeButton.RichText = true
 		minimizeButton.AutoButtonColor = false
 		minimizeButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		minimizeButton.BackgroundTransparency = 1
@@ -1776,6 +1781,7 @@ function Library.Window(self, Options)
 			title.Name = "title"
 			title.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 			title.Text = Section.Name
+			title.RichText = true
 			title.TextColor3 = Color3.fromRGB(221, 221, 221)
 			title.TextSize = Library.GetScaledTextSize(14)
 			title.TextXAlignment = Enum.TextXAlignment.Left
@@ -2089,6 +2095,7 @@ function Library.Window(self, Options)
 		local subsectionbutton = Instance.new("TextButton")
 		subsectionbutton.Name = "subsectionbutton"
 		subsectionbutton.Text = ""
+		subsectionbutton.RichText = true
 		subsectionbutton.AutoButtonColor = false
 		subsectionbutton.Active = true
 		subsectionbutton.BackgroundColor3 = Color3.fromRGB(24, 24, 27)
@@ -2123,6 +2130,7 @@ function Library.Window(self, Options)
 		subsectionname.Name = "subsectionname"
 		subsectionname.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 		subsectionname.Text = Properties.Name or "Group"
+		subsectionname.RichText = true
 		subsectionname.TextColor3 = Color3.fromRGB(115, 115, 115)
 		subsectionname.TextSize = Library.GetScaledTextSize(14)
 		subsectionname.AutomaticSize = Enum.AutomaticSize.X
@@ -2404,6 +2412,7 @@ function Library.Window(self, Options)
 		toggleElement.Name = "ToggleElement"
 		toggleElement.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")		
 		toggleElement.Text = ""
+		toggleElement.RichText = true
 		toggleElement.TextColor3 = Color3.fromRGB(0, 0, 0)
 		toggleElement.TextSize = Library.GetScaledTextSize(14)
 		toggleElement.AutoButtonColor = false
@@ -2460,6 +2469,7 @@ function Library.Window(self, Options)
 		toggleName.Name = "ToggleName"
 		toggleName.FontFace = Font.new("rbxassetid://12187365364")		
 		toggleName.Text = Toggle.Name
+		toggleName.RichText = true
 		toggleName.TextColor3 = Color3.fromRGB(115, 115, 115)
 		toggleName.TextSize = Library.GetScaledTextSize(12)
 		toggleName.TextTruncate = Enum.TextTruncate.AtEnd
@@ -2563,6 +2573,7 @@ function Library.Window(self, Options)
 			local keybindcurrentframe = Instance.new("TextButton")			
 			keybindcurrentframe.Name = "Keybindcurrentframe"
 			keybindcurrentframe.Text = ""
+			keybindcurrentframe.RichText = true
 			keybindcurrentframe.AutoButtonColor = false
 			keybindcurrentframe.AnchorPoint = Vector2.new(1, 0.5)
 			keybindcurrentframe.AutomaticSize = Enum.AutomaticSize.X
@@ -2624,6 +2635,7 @@ function Library.Window(self, Options)
 			keybindtexrt.Name = "keybindtexrt"
 			keybindtexrt.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 			keybindtexrt.Text = Library.Keys[Keybind.Key] or Keybind.Key.Name or "..."
+			keybindtexrt.RichText = true
 			keybindtexrt.TextColor3 = Color3.fromRGB(115, 115, 115)
 			keybindtexrt.TextSize = Library.GetScaledTextSize(12)
 			keybindtexrt.TextWrapped = true
@@ -2845,6 +2857,7 @@ function Library.Window(self, Options)
 		slidername.Name = "Slidername"
 		slidername.FontFace = Font.new("rbxassetid://12187365364")		
 		slidername.Text = Slider.Name
+		slidername.RichText = true
 		slidername.TextColor3 = Color3.fromRGB(115, 115, 115)
 		slidername.TextSize = Library.GetScaledTextSize(12)
 		slidername.TextTruncate = Enum.TextTruncate.AtEnd
@@ -2904,6 +2917,7 @@ function Library.Window(self, Options)
 		slidertextbox.FontFace = Font.new("rbxassetid://12187365364")		
 		slidertextbox.PlaceholderColor3 = Color3.fromRGB(178, 178, 178)
 		slidertextbox.Text = "50"
+		slidertextbox.RichText = true
 		slidertextbox.TextColor3 = Color3.fromRGB(67, 67, 68)
 		slidertextbox.TextSize = Library.GetScaledTextSize(12)
 		slidertextbox.TextXAlignment = Enum.TextXAlignment.Right
@@ -3102,6 +3116,7 @@ function Library.Window(self, Options)
 		dropdownname.Name = "Dropdownname"
 		dropdownname.FontFace = Font.new("rbxassetid://12187365364")		
 		dropdownname.Text = Dropdown.Name
+		dropdownname.RichText = true
 		dropdownname.TextColor3 = Color3.fromRGB(115, 115, 115)
 		dropdownname.TextSize = Library.GetScaledTextSize(12)
 		dropdownname.TextXAlignment = Enum.TextXAlignment.Left
@@ -3119,6 +3134,7 @@ function Library.Window(self, Options)
 		local dropdowncurrentframe = Instance.new("TextButton")		
 		dropdowncurrentframe.Name = "Dropdowncurrentframe"
 		dropdowncurrentframe.Text = ""
+		dropdowncurrentframe.RichText = true
 		dropdowncurrentframe.AutoButtonColor = false
 		dropdowncurrentframe.AnchorPoint = Vector2.new(1, 0.5)
 		dropdowncurrentframe.AutomaticSize = Dropdown.AutoSize and Enum.AutomaticSize.X or Enum.AutomaticSize.None
@@ -3182,6 +3198,7 @@ function Library.Window(self, Options)
 		dropdownCurrenttext.Name = "DropdownCurrenttext"
 		dropdownCurrenttext.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 		dropdownCurrenttext.Text = "..."
+		dropdownCurrenttext.RichText = true
 		dropdownCurrenttext.TextColor3 = Color3.fromRGB(115, 115, 115)
 		dropdownCurrenttext.TextSize = Library.GetScaledTextSize(12)
 		dropdownCurrenttext.TextWrapped = false
@@ -3268,6 +3285,7 @@ function Library.Window(self, Options)
 			searchInput.PlaceholderText = "Search..."
 			searchInput.PlaceholderColor3 = Color3.fromRGB(115, 115, 115)
 			searchInput.Text = ""
+			searchInput.RichText = true
 			searchInput.TextColor3 = Color3.fromRGB(255, 255, 255)
 			searchInput.TextSize = Library.GetScaledTextSize(11)
 			searchInput.TextXAlignment = Enum.TextXAlignment.Left
@@ -3448,6 +3466,7 @@ function Library.Window(self, Options)
 			option.Name = optionName
 			option.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 			option.Text = optionName
+			option.RichText = true
 			option.TextColor3 = Color3.fromRGB(115, 115, 115)
 			option.TextSize = Library.GetScaledTextSize(12)
 			option.TextWrapped = true
@@ -3463,6 +3482,7 @@ function Library.Window(self, Options)
 			local textButton = Instance.new("TextButton")			
 			textButton.Name = "TextButton"
 			textButton.Text = ""
+			textButton.RichText = true
 			textButton.BackgroundTransparency = 1
 			textButton.Size = UDim2.fromScale(1, 1)
 			textButton.ZIndex = Dropdown.ZIndex + 10
@@ -3941,6 +3961,7 @@ function Library.Window(self, Options)
 		listName.Name = "ListName"
 		listName.FontFace = Font.new("rbxassetid://12187365364")		
 		listName.Text = List.Name
+		listName.RichText = true
 		listName.TextColor3 = Color3.fromRGB(115, 115, 115)
 		listName.TextSize = Library.GetScaledTextSize(12)
 		listName.TextXAlignment = Enum.TextXAlignment.Left
@@ -4028,6 +4049,7 @@ function Library.Window(self, Options)
 			option.Name = optionName
 			option.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 			option.Text = optionName
+			option.RichText = true
 			option.TextColor3 = Color3.fromRGB(115, 115, 115)
 			option.TextSize = Library.GetScaledTextSize(12)
 			option.TextWrapped = true
@@ -4043,6 +4065,7 @@ function Library.Window(self, Options)
 			local textButton = Instance.new("TextButton")			
 			textButton.Name = "TextButton"
 			textButton.Text = ""
+			textButton.RichText = true
 			textButton.BackgroundTransparency = 1
 			textButton.Size = UDim2.fromScale(1, 1)
 			textButton.ZIndex = 15
@@ -4324,6 +4347,7 @@ function Library.Window(self, Options)
 		tabButton.Name = "tab button"
 		tabButton.FontFace = Font.new("rbxassetid://12187361378")		
 		tabButton.Text = ""
+		tabButton.RichText = true
 		tabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 		tabButton.TextSize = Library.GetScaledTextSize(22)
 		tabButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
@@ -4336,6 +4360,7 @@ function Library.Window(self, Options)
 		thebuttonwow.Name = "thebuttonwow"
 		thebuttonwow.FontFace = Font.new("rbxassetid://12187365364")		
 		thebuttonwow.Text = Button.Name
+		thebuttonwow.RichText = true
 		thebuttonwow.TextColor3 = Color3.fromRGB(115, 115, 115)
 		thebuttonwow.TextSize = Library.GetScaledTextSize(12)
 		thebuttonwow.Active = false
@@ -4443,6 +4468,7 @@ function Library.Window(self, Options)
 	    textboxname.Name = "Textboxname"
 	    textboxname.FontFace = Font.new("rbxassetid://12187365364")     
 	    textboxname.Text = Textbox.Name
+		textboxname.RichText = true
 	    textboxname.TextColor3 = Color3.fromRGB(115, 115, 115)
 	    textboxname.TextSize = Library.GetScaledTextSize(12)
 	    textboxname.TextXAlignment = Enum.TextXAlignment.Left
@@ -4523,6 +4549,7 @@ function Library.Window(self, Options)
 	    textboxValue.PlaceholderColor3 = Color3.fromRGB(115, 115, 115)
 	    textboxValue.PlaceholderText = Textbox.PlaceholderText
 	    textboxValue.Text = Textbox.Default
+		textboxValue.RichText = true
 	    textboxValue.TextColor3 = Color3.fromRGB(115, 115, 115)
 	    textboxValue.TextSize = Library.GetScaledTextSize(12)
 	    textboxValue.TextXAlignment = Enum.TextXAlignment.Left
@@ -4647,6 +4674,7 @@ function Library.Window(self, Options)
 			separatorLabel.Name = "SeparatorLabel"
 			separatorLabel.FontFace = Font.new("rbxassetid://12187365364")
 			separatorLabel.Text = Separator.Name
+			separatorLabel.RichText = true
 			separatorLabel.TextColor3 = Color3.fromRGB(115, 115, 115)
 			separatorLabel.TextSize = Library.GetScaledTextSize(11)
 			separatorLabel.TextXAlignment = Enum.TextXAlignment.Center
@@ -4697,6 +4725,7 @@ function Library.Window(self, Options)
 		local keybindframE = Instance.new("TextButton", Keybind.Section.Elements.SectionContent)
 		keybindframE.Name = "keybindfram e"
 		keybindframE.Text = ""
+		keybindframE.RichText = true
 		keybindframE.Active = false
 		keybindframE.AutoButtonColor = false
 		keybindframE.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -4710,6 +4739,7 @@ function Library.Window(self, Options)
 		textboxname.Name = "Textboxname"
 		textboxname.FontFace = Font.new("rbxassetid://12187365364")		
 		textboxname.Text = Keybind.Name
+		textboxname.RichText = true
 		textboxname.TextColor3 = Color3.fromRGB(115, 115, 115)
 		textboxname.TextSize = Library.GetScaledTextSize(12)
 		textboxname.TextXAlignment = Enum.TextXAlignment.Left
@@ -4786,6 +4816,7 @@ function Library.Window(self, Options)
 		keybindtexrt.Name = "keybindtexrt"
 		keybindtexrt.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 		keybindtexrt.Text = Library.Keys[Keybind.Key] or Keybind.Key.Name or "..."
+		keybindtexrt.RichText = true
 		keybindtexrt.TextColor3 = Color3.fromRGB(115, 115, 115)
 		keybindtexrt.TextSize = Library.GetScaledTextSize(12)
 		keybindtexrt.TextWrapped = true
@@ -5000,6 +5031,7 @@ function Library.Window(self, Options)
 		local colorpickerframe = Instance.new("TextButton", ColorPicker.Section.Elements.SectionContent)
 		colorpickerframe.Name = "ColorPickerFrame"
 		colorpickerframe.Text = ""
+		colorpickerframe.RichText = true
 		colorpickerframe.Active = false
 		colorpickerframe.AutoButtonColor = false
 		colorpickerframe.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -5014,6 +5046,7 @@ function Library.Window(self, Options)
 		colorpickername.Name = "ColorPickerName"
 		colorpickername.FontFace = Font.new("rbxassetid://12187365364")		
 		colorpickername.Text = ColorPicker.Name
+		colorpickername.RichText = true
 		colorpickername.TextColor3 = Color3.fromRGB(115, 115, 115)
 		colorpickername.TextSize = Library.GetScaledTextSize(12)
 		colorpickername.TextXAlignment = Enum.TextXAlignment.Left
@@ -5491,6 +5524,7 @@ function Library.Window(self, Options)
 			titleLabel.Name = "TitleLabel"
 			titleLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 			titleLabel.Text = Paragraph.Title
+			titleLabel.RichText = true
 			titleLabel.TextColor3 = Color3.fromRGB(221, 221, 221)
 			titleLabel.TextSize = Library.GetScaledTextSize(14)
 			titleLabel.TextWrapped = true
@@ -5540,6 +5574,7 @@ function Library.Window(self, Options)
 					textLabel.Name = "TextLabel"
 					textLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
 					textLabel.Text = item.Text or ""
+					textLabel.RichText = true
 					textLabel.TextColor3 = Color3.fromRGB(115, 115, 115)
 					textLabel.TextSize = Library.GetScaledTextSize(12)
 					textLabel.TextWrapped = true
@@ -5584,6 +5619,7 @@ function Library.Window(self, Options)
 			descriptionLabel.Name = "DescriptionLabel"
 			descriptionLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
 			descriptionLabel.Text = Paragraph.Description
+			descriptionLabel.RichText = true
 			descriptionLabel.TextColor3 = Color3.fromRGB(115, 115, 115)
 			descriptionLabel.TextSize = Library.GetScaledTextSize(12)
 			descriptionLabel.TextWrapped = true
@@ -5617,6 +5653,8 @@ function Library.Window(self, Options)
 					titleLabel.Visible = true
 					titleLabel.Text = newTitle
 				end
+
+				titleLabel.RichText = true
 			end
 
 			-- Update UIListLayout padding based on title visibility
@@ -5672,6 +5710,7 @@ function Library.Window(self, Options)
 						textLabel.Name = "TextLabel"
 						textLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
 						textLabel.Text = item.Text or ""
+						textLabel.RichText = true
 						textLabel.TextColor3 = Color3.fromRGB(115, 115, 115)
 						textLabel.TextSize = Library.GetScaledTextSize(12)
 						textLabel.TextWrapped = true
@@ -5716,6 +5755,7 @@ function Library.Window(self, Options)
 				descriptionLabel.Name = "DescriptionLabel"
 				descriptionLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
 				descriptionLabel.Text = newDescription
+				descriptionLabel.RichText = true
 				descriptionLabel.TextColor3 = Color3.fromRGB(115, 115, 115)
 				descriptionLabel.TextSize = Library.GetScaledTextSize(12)
 				descriptionLabel.TextWrapped = true
@@ -6002,6 +6042,7 @@ function Library.Window(self, Options)
 		local menu = Instance.new("TextButton")		
 		menu.Name = "Menu"
 		menu.Text = ""
+		menu.RichText = true
 		menu.Active = false
 		menu.AnchorPoint = Vector2.new(0.5, 0)
 		menu.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
@@ -6224,6 +6265,7 @@ function Library.Notification(self, message, time, type)
 	local typeLabel = Instance.new("TextLabel")
 	typeLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
 	typeLabel.Text = string.upper(type)
+	typeLabel.RichText = true
 	typeLabel.TextColor3 = typeColor
 	typeLabel.TextSize = Library.GetScaledTextSize(10)
 	typeLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -6236,6 +6278,7 @@ function Library.Notification(self, message, time, type)
 	local timeLabel = Instance.new("TextLabel")
 	timeLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
 	timeLabel.Text = os.date("%H:%M")
+	timeLabel.RichText = true
 	timeLabel.TextColor3 = Color3.fromRGB(115, 115, 115)
 	timeLabel.TextSize = Library.GetScaledTextSize(9)
 	timeLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -6249,6 +6292,7 @@ function Library.Notification(self, message, time, type)
 	local messageLabel = Instance.new("TextLabel")
 	messageLabel.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Medium, Enum.FontStyle.Normal)
 	messageLabel.Text = message
+	messageLabel.RichText = true
 	messageLabel.TextColor3 = Color3.fromRGB(235, 235, 235)
 	messageLabel.TextSize = Library.GetScaledTextSize(12)
 	messageLabel.TextWrapped = true
@@ -6328,5 +6372,16 @@ function Library.Notification(self, message, time, type)
 		end)
 	end)
 end
+
+
+-- Accessing Flag Values
+-- local autoFarmEnabled = Library.Flags["AutoFarm"]
+-- local farmSpeed = Library.Flags["FarmSpeed"]
+-- local farmMode = Library.Flags["FarmMode"]
+
+-- Setting Flag Values
+-- Library:SetFlag("AutoFarm", true)
+-- Library:SetFlag("FarmSpeed", 7.5)
+-- Library:SetFlag("FarmMode", "Fast")
 
 return Library
