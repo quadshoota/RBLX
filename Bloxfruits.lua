@@ -18,6 +18,7 @@ Library = {
 	Holder = nil,
 	Keys = {
 		[Enum.KeyCode.LeftShift] = "LShift",
+		[Enum.KeyCode.Insert] = "Insert",
 		[Enum.KeyCode.RightShift] = "RShift",
 		[Enum.KeyCode.LeftControl] = "LCtrl",
 		[Enum.KeyCode.RightControl] = "RCtrl",
@@ -68,7 +69,7 @@ Library = {
 
 	Connections = {},
 	connections = {},
-	UIKey = Enum.KeyCode.End,
+	UIKey = Enum.KeyCode.Insert,
 	ScreenGUI = nil,
 	Fontsize = 12,
 }
@@ -431,10 +432,32 @@ function Library.LoadConfig(self, Config)
 	end
 end
 
+Library._LastTouchPos = Vector2.new(0, 0)
+
+UserInputService.InputBegan:Connect(function(input)
+	if (input.UserInputType == Enum.UserInputType.Touch) then
+		Library._LastTouchPos = Vector2.new(input.Position.X, input.Position.Y)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if (input.UserInputType == Enum.UserInputType.Touch) then
+		Library._LastTouchPos = Vector2.new(input.Position.X, input.Position.Y)
+	end
+end)
+
 function Library.IsMouseOverFrame(self, Frame)
 	local AbsPos, AbsSize = Frame.AbsolutePosition, Frame.AbsoluteSize
 
-	if (Mouse.X >= AbsPos.X and Mouse.X <= AbsPos.X + AbsSize.X and Mouse.Y >= AbsPos.Y and Mouse.Y <= AbsPos.Y + AbsSize.Y) then
+	local inputX, inputY = Mouse.X, Mouse.Y
+
+	-- On mobile, use tracked touch position
+	local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	if (isMobile and Library._LastTouchPos) then
+		inputX, inputY = Library._LastTouchPos.X, Library._LastTouchPos.Y
+	end
+
+	if (inputX >= AbsPos.X and inputX <= AbsPos.X + AbsSize.X and inputY >= AbsPos.Y and inputY <= AbsPos.Y + AbsSize.Y) then
 		return true
 	end
 
@@ -525,7 +548,7 @@ function Library.Window(self, Options)
 	end
 
 	local newgabrieluibyraphael = Instance.new("ScreenGui", Path)
-	newgabrieluibyraphael.Name = "a ui by raphael"
+	newgabrieluibyraphael.Name = "a ui by kezo"
 	newgabrieluibyraphael.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 	Library:connection(UserInputService.InputBegan, function(Input)
@@ -602,6 +625,22 @@ function Library.Window(self, Options)
 		)
 	end
 
+	function Library.ElementHeight(desktopHeight)
+		local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+		if (isMobile) then
+			return math.max(desktopHeight, 36)
+		end
+		return desktopHeight
+	end
+
+	function Library.SliderBarHeight(desktopHeight)
+		local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+		if (isMobile) then
+			return math.max(desktopHeight, 14)
+		end
+		return desktopHeight
+	end
+
 	function Library.SizeFromOffset(x, y, customScale)
 		return Library.GetSizeScaled(UDim2.fromOffset(x, y), customScale)
 	end
@@ -638,6 +677,21 @@ function Library.Window(self, Options)
 				
 				local originalSize = descendant:GetAttribute("OriginalTextSize")
 				descendant.TextSize = Library.GetScaledTextSize(originalSize)
+			end
+		end
+
+		-- Scale sidebar proportionally based on frame width
+		local frameWidth = self.mainframe.AbsoluteSize.X
+		local sidebarWidth = math.clamp(math.floor(frameWidth * 0.225), 100, 170)
+		local sidebar = self.mainframe:FindFirstChild("theholderdwbbg")
+		if (sidebar) then
+			local sidebarFrame = sidebar:FindFirstChild("SidebarHolder")
+			local contentFrame = sidebar:FindFirstChild("content")
+			if (sidebarFrame) then
+				sidebarFrame.Size = UDim2.new(0, sidebarWidth, 1, 0)
+			end
+			if (contentFrame) then
+				contentFrame.Size = UDim2.new(1, -sidebarWidth, 1, 0)
 			end
 		end
 	end
@@ -819,7 +873,8 @@ function Library.Window(self, Options)
 	sidebarHolder.BackgroundTransparency = 1
 	sidebarHolder.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	sidebarHolder.BorderSizePixel = 0
-	sidebarHolder.Size = Library.UDim2(0, 150, 1, 0)
+	sidebarHolder.Size = UDim2.new(0, 150, 1, 0)
+	sidebarHolder.ClipsDescendants = true
 
 	local anothersidebarholder = Instance.new("Frame")	
 	anothersidebarholder.Name = "anothersidebarholder"
@@ -1316,7 +1371,7 @@ function Library.Window(self, Options)
 	content.BorderSizePixel = 0
 	content.ClipsDescendants = true
 	content.LayoutOrder = 1
-	content.Size = Library.UDim2(1, -150, 1, 0)
+	content.Size = UDim2.new(1, -150, 1, 0)
 	content.Parent = theholderdwbbg
 
 	theholderdwbbg.Parent = mainframe
@@ -1355,6 +1410,7 @@ function Library.Window(self, Options)
 		atab.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		atab.BorderSizePixel = 0
 		atab.Size = Library.UDim2(1, -20, 0, 29)
+		atab.ClipsDescendants = true
 
 		local uICorner = Instance.new("UICorner")		
 		uICorner.Name = "UICorner"
@@ -1401,12 +1457,13 @@ function Library.Window(self, Options)
         tabnme.Text = Tab.Name
         tabnme.TextColor3 = Color3.fromRGB(115, 115, 115)
         tabnme.TextSize = Library.GetScaledTextSize(12)
-        tabnme.AutomaticSize = Enum.AutomaticSize.X
+        tabnme.TextTruncate = Enum.TextTruncate.AtEnd
+        tabnme.TextXAlignment = Enum.TextXAlignment.Left
         tabnme.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         tabnme.BackgroundTransparency = 1
         tabnme.BorderColor3 = Color3.fromRGB(0, 0, 0)
         tabnme.BorderSizePixel = 0
-        tabnme.Size = UDim2.fromScale(0, 1)
+        tabnme.Size = UDim2.new(1, Tab.Icon and -30 or -16, 1, 0)
         tabnme.Parent = atab
 
 		local tabs4 = Instance.new("ScrollingFrame", content)
@@ -2354,7 +2411,7 @@ function Library.Window(self, Options)
 		toggleElement.BackgroundTransparency = 1
 		toggleElement.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		toggleElement.BorderSizePixel = 0
-		toggleElement.Size = Library.UDim2(1, 0, 0, 25)
+		toggleElement.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(25))
 
 		local box = Instance.new("Frame")		
 		box.Name = "Box"
@@ -2405,15 +2462,16 @@ function Library.Window(self, Options)
 		toggleName.Text = Toggle.Name
 		toggleName.TextColor3 = Color3.fromRGB(115, 115, 115)
 		toggleName.TextSize = Library.GetScaledTextSize(12)
-		toggleName.TextWrapped = true
+		toggleName.TextTruncate = Enum.TextTruncate.AtEnd
 		toggleName.TextXAlignment = Enum.TextXAlignment.Left
 		toggleName.AnchorPoint = Vector2.new(0, 0.5)
 		toggleName.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		toggleName.BackgroundTransparency = 1
 		toggleName.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		toggleName.BorderSizePixel = 0
+		toggleName.ClipsDescendants = true
 		toggleName.Position = UDim2.new(0, 8, 0.5, 0)
-		toggleName.Size = Library.UDim2(1, -52, 1, 0)
+		toggleName.Size = UDim2.new(1, -52, 1, 0)
 		toggleName.Parent = toggleElement
 
 		function Toggle.Set(self, newState)
@@ -2500,7 +2558,7 @@ function Library.Window(self, Options)
 				Binding = false,
 				State = false,
 			}
-			toggleName.Size = Library.UDim2(1, -85, 1, 0)
+			toggleName.Size = UDim2.new(1, -85, 1, 0)
 
 			local keybindcurrentframe = Instance.new("TextButton")			
 			keybindcurrentframe.Name = "Keybindcurrentframe"
@@ -2771,7 +2829,7 @@ function Library.Window(self, Options)
 		sliderframe.BackgroundTransparency = 1
 		sliderframe.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		sliderframe.BorderSizePixel = 0
-		sliderframe.Size = Library.UDim2(1, 0, 0, 20)
+		sliderframe.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(20))
 
 		local textHolder = Instance.new("Frame")		
 		textHolder.Name = "TextHolder"
@@ -2779,7 +2837,8 @@ function Library.Window(self, Options)
 		textHolder.BackgroundTransparency = 1
 		textHolder.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		textHolder.BorderSizePixel = 0
-		textHolder.Size = Library.UDim2(1, -52, 1, 0)
+		textHolder.ClipsDescendants = true
+		textHolder.Size = UDim2.new(0.45, 0, 1, 0)
 		textHolder.Parent = sliderframe
 
 		local slidername = Instance.new("TextLabel")		
@@ -2788,14 +2847,15 @@ function Library.Window(self, Options)
 		slidername.Text = Slider.Name
 		slidername.TextColor3 = Color3.fromRGB(115, 115, 115)
 		slidername.TextSize = Library.GetScaledTextSize(12)
-		slidername.TextWrapped = true
+		slidername.TextTruncate = Enum.TextTruncate.AtEnd
 		slidername.TextXAlignment = Enum.TextXAlignment.Left
 		slidername.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		slidername.BackgroundTransparency = 1
 		slidername.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		slidername.BorderSizePixel = 0
+		slidername.ClipsDescendants = true
 		slidername.Position = UDim2.fromOffset(8, 0)
-		slidername.Size = Library.UDim2(1, -52, 1, 0)
+		slidername.Size = UDim2.new(1, 0, 1, 0)
 		slidername.Parent = textHolder
 
 		local thebgofsliderbar = Instance.new("Frame")		
@@ -2806,7 +2866,7 @@ function Library.Window(self, Options)
 		thebgofsliderbar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		thebgofsliderbar.BorderSizePixel = 0
 		thebgofsliderbar.Position = UDim2.new(1, -7, 0.5, 0)
-		thebgofsliderbar.Size = Library.UDim2(1, -120, 0, 8)
+		thebgofsliderbar.Size = UDim2.new(0.5, -7, 0, Library.SliderBarHeight(8))
 		thebgofsliderbar.Parent = sliderframe
 
 		local uICorner1 = Instance.new("UICorner")		
@@ -3036,7 +3096,7 @@ function Library.Window(self, Options)
 		dropdown.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		dropdown.BorderSizePixel = 0
 		dropdown.ZIndex = Dropdown.ZIndex
-		dropdown.Size = Library.UDim2(1, 0, 0, 25)
+		dropdown.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(25))
 
 		local dropdownname = Instance.new("TextLabel")		
 		dropdownname.Name = "Dropdownname"
@@ -3045,13 +3105,15 @@ function Library.Window(self, Options)
 		dropdownname.TextColor3 = Color3.fromRGB(115, 115, 115)
 		dropdownname.TextSize = Library.GetScaledTextSize(12)
 		dropdownname.TextXAlignment = Enum.TextXAlignment.Left
+		dropdownname.TextTruncate = Enum.TextTruncate.AtEnd
 		dropdownname.AnchorPoint = Vector2.new(0, 0.5)
 		dropdownname.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		dropdownname.BackgroundTransparency = 1
 		dropdownname.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		dropdownname.BorderSizePixel = 0
+		dropdownname.ClipsDescendants = true
 		dropdownname.Position = UDim2.new(0, 8, 0.5, 0)
-		dropdownname.Size = Library.UDim2(1, -12, 0, 15)
+		dropdownname.Size = UDim2.new(0.5, -8, 0, 15)
 		dropdownname.Parent = dropdown
 
 		local dropdowncurrentframe = Instance.new("TextButton")		
@@ -3395,7 +3457,7 @@ function Library.Window(self, Options)
             option.BackgroundTransparency = 1
             option.BorderSizePixel = 0
             option.ClipsDescendants = true
-            option.Size = Library.UDim2(1, 0, 0, 20)
+            option.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(20))
             option.Parent = optionHolder
 
 			local textButton = Instance.new("TextButton")			
@@ -3772,7 +3834,7 @@ function Library.Window(self, Options)
             for _, optionData in pairs(Dropdown.OptionInsts) do
                 if (optionData.frame) then
                     optionData.frame.AutomaticSize = Enum.AutomaticSize.None
-                    optionData.frame.Size = Library.UDim2(1, 0, 0, 20)
+                    optionData.frame.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(20))
                 end
             end
         end
@@ -3790,11 +3852,8 @@ function Library.Window(self, Options)
 				return
 			end
 			
-			if (input.UserInputType == Enum.UserInputType.MouseButton1) then
+			if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
 				if (Library.CurrentOpenDropdown and Library.CurrentOpenDropdown == Dropdown) then
-					local mouse = LocalPlayer:GetMouse()
-					local mousePos = Vector2.new(mouse.X, mouse.Y)
-					
 					local overDropdownFrame = Library:IsMouseOverFrame(dropdown)
 					local overDropdownList = Library:IsMouseOverFrame(dropdownList)
 					
@@ -3804,6 +3863,29 @@ function Library.Window(self, Options)
 						dropdownList.Visible = false
 						TweenService:Create(dropdownIcon, TweenInfo.new(0.2), { Rotation = 0 }):Play()
 						Library.CurrentOpenDropdown = nil
+						
+						-- Restore ZIndex when closing via outside click
+						dropdownList.ZIndex = Dropdown.ZIndex
+						optionHolder.ZIndex = Dropdown.ZIndex + 2
+						if (Dropdown.searchInput) then
+							Dropdown.searchInput.ZIndex = Dropdown.ZIndex + 5
+						end
+						if (Dropdown.searchIcon) then
+							Dropdown.searchIcon.ZIndex = Dropdown.ZIndex + 6
+						end
+						for _, optionData in pairs(Dropdown.OptionInsts) do
+							if optionData.button then
+								optionData.button.ZIndex = Dropdown.ZIndex + 10
+							end
+							if optionData.frame then
+								optionData.frame.ZIndex = Dropdown.ZIndex
+							end
+						end
+						-- Clear search when closing
+						if (Dropdown.Searchable and Dropdown.searchInput) then
+							Dropdown.searchInput.Text = ""
+							filterOptions("")
+						end
 					end
 				end
 			end
@@ -3852,7 +3934,8 @@ function Library.Window(self, Options)
 		listFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		listFrame.BorderSizePixel = 0
 		listFrame.ZIndex = List.ZIndex
-		listFrame.Size = Library.UDim2(1, 0, 0, math.max(List.MinHeight + 25, math.min(25 + (#List.Options * 22) + 10, List.MaxHeight + 25)))
+		local listOptionHeight = Library.ElementHeight(20) + 2
+		listFrame.Size = Library.UDim2(1, 0, 0, math.max(List.MinHeight + 25, math.min(25 + (#List.Options * listOptionHeight) + 10, List.MaxHeight + 25)))
 
 		local listName = Instance.new("TextLabel")		
 		listName.Name = "ListName"
@@ -3861,13 +3944,15 @@ function Library.Window(self, Options)
 		listName.TextColor3 = Color3.fromRGB(115, 115, 115)
 		listName.TextSize = Library.GetScaledTextSize(12)
 		listName.TextXAlignment = Enum.TextXAlignment.Left
+		listName.TextTruncate = Enum.TextTruncate.AtEnd
 		listName.AnchorPoint = Vector2.new(0, 0)
 		listName.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		listName.BackgroundTransparency = 1
 		listName.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		listName.BorderSizePixel = 0
+		listName.ClipsDescendants = true
 		listName.Position = UDim2.new(0, 8, 0, 0)
-		listName.Size = Library.UDim2(1, -16, 0, 20)
+		listName.Size = UDim2.new(1, -16, 0, 20)
 		listName.Parent = listFrame
 
 		local listContainer = Instance.new("Frame")		
@@ -3878,7 +3963,7 @@ function Library.Window(self, Options)
 		listContainer.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		listContainer.BorderSizePixel = 0
 		listContainer.Position = UDim2.new(0.5, 0, 0, 22)
-		listContainer.Size = Library.UDim2(1, -14, 0, math.max(List.MinHeight, math.min(#List.Options * 22 + 4, List.MaxHeight)))
+		listContainer.Size = Library.UDim2(1, -14, 0, math.max(List.MinHeight, math.min(#List.Options * listOptionHeight + 4, List.MaxHeight)))
 		listContainer.ZIndex = List.ZIndex
 		listContainer.ClipsDescendants = true
 		listContainer.Parent = listFrame
@@ -3952,7 +4037,7 @@ function Library.Window(self, Options)
             option.BackgroundTransparency = 1
             option.BorderSizePixel = 0
             option.ClipsDescendants = true
-            option.Size = Library.UDim2(1, 0, 0, 20)
+            option.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(20))
             option.Parent = optionHolder
 
 			local textButton = Instance.new("TextButton")			
@@ -4086,7 +4171,8 @@ function Library.Window(self, Options)
 
 			-- Update container size
 			local optionCount = #List.Options
-			local newHeight = math.max(List.MinHeight, math.min(optionCount * 22 + 4, List.MaxHeight))
+			local refreshOptionHeight = Library.ElementHeight(20) + 2
+			local newHeight = math.max(List.MinHeight, math.min(optionCount * refreshOptionHeight + 4, List.MaxHeight))
 			listContainer.Size = Library.UDim2(1, -14, 0, newHeight)
 			listFrame.Size = Library.UDim2(1, 0, 0, math.max(List.MinHeight + 25, newHeight + 25))
 
@@ -4244,7 +4330,7 @@ function Library.Window(self, Options)
         tabButton.BackgroundTransparency = 1
         tabButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
         tabButton.BorderSizePixel = 0
-        tabButton.Size = Library.UDim2(1, 0, 0, 21)
+        tabButton.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(21))
 
         local thebuttonwow = Instance.new("TextButton")		
 		thebuttonwow.Name = "thebuttonwow"
@@ -4354,7 +4440,7 @@ function Library.Window(self, Options)
 		textox.BackgroundTransparency = 1
 		textox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		textox.BorderSizePixel = 0
-		textox.Size = Library.UDim2(1, 0, 0, 20)
+		textox.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(20))
 
 		local textboxname = Instance.new("TextLabel")		
 		textboxname.Name = "Textboxname"
@@ -4363,13 +4449,15 @@ function Library.Window(self, Options)
 		textboxname.TextColor3 = Color3.fromRGB(115, 115, 115)
 		textboxname.TextSize = Library.GetScaledTextSize(12)
 		textboxname.TextXAlignment = Enum.TextXAlignment.Left
+		textboxname.TextTruncate = Enum.TextTruncate.AtEnd
 		textboxname.AnchorPoint = Vector2.new(0, 0.5)
 		textboxname.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		textboxname.BackgroundTransparency = 1
 		textboxname.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		textboxname.BorderSizePixel = 0
+		textboxname.ClipsDescendants = true
 		textboxname.Position = UDim2.new(0, 8, 0.5, 0)
-		textboxname.Size = Library.UDim2(1, -12, 0, 15)
+		textboxname.Size = UDim2.new(0.5, -8, 0, 15)
 		textboxname.Parent = textox
 
 		local textboxcurrentframe = Instance.new("Frame")		
@@ -4660,7 +4748,7 @@ function Library.Window(self, Options)
 		keybindframE.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		keybindframE.BorderSizePixel = 0
 		keybindframE.Selectable = false
-		keybindframE.Size = Library.UDim2(1, 0, 0, 25)
+		keybindframE.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(25))
 
 		local textboxname = Instance.new("TextLabel")		
 		textboxname.Name = "Textboxname"
@@ -4669,13 +4757,15 @@ function Library.Window(self, Options)
 		textboxname.TextColor3 = Color3.fromRGB(115, 115, 115)
 		textboxname.TextSize = Library.GetScaledTextSize(12)
 		textboxname.TextXAlignment = Enum.TextXAlignment.Left
+		textboxname.TextTruncate = Enum.TextTruncate.AtEnd
 		textboxname.AnchorPoint = Vector2.new(0, 0.5)
 		textboxname.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		textboxname.BackgroundTransparency = 1
 		textboxname.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		textboxname.BorderSizePixel = 0
+		textboxname.ClipsDescendants = true
 		textboxname.Position = UDim2.new(0, 8, 0.5, 0)
-		textboxname.Size = Library.UDim2(1, -12, 0, 15)
+		textboxname.Size = UDim2.new(0.5, -8, 0, 15)
 		textboxname.Parent = keybindframE
 
 		local keybindcurrentframe = Instance.new("Frame")		
@@ -4962,7 +5052,7 @@ function Library.Window(self, Options)
 		colorpickerframe.BorderSizePixel = 0
 		colorpickerframe.Selectable = false
 		colorpickerframe.ZIndex = ColorPicker.Zindex
-		colorpickerframe.Size = Library.UDim2(1, 0, 0, 25)
+		colorpickerframe.Size = Library.UDim2(1, 0, 0, Library.ElementHeight(25))
 
 		local colorpickername = Instance.new("TextLabel")		
 		colorpickername.Name = "ColorPickerName"
@@ -4971,13 +5061,15 @@ function Library.Window(self, Options)
 		colorpickername.TextColor3 = Color3.fromRGB(115, 115, 115)
 		colorpickername.TextSize = Library.GetScaledTextSize(12)
 		colorpickername.TextXAlignment = Enum.TextXAlignment.Left
+		colorpickername.TextTruncate = Enum.TextTruncate.AtEnd
 		colorpickername.AnchorPoint = Vector2.new(0, 0.5)
 		colorpickername.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		colorpickername.BackgroundTransparency = 1
 		colorpickername.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		colorpickername.BorderSizePixel = 0
+		colorpickername.ClipsDescendants = true
 		colorpickername.Position = UDim2.new(0, 8, 0.5, 0)
-		colorpickername.Size = Library.UDim2(1, -12, 0, 15)
+		colorpickername.Size = UDim2.new(1, -50, 0, 15)
 		colorpickername.Parent = colorpickerframe
 
 		local box = Instance.new("TextButton")		
@@ -5071,7 +5163,7 @@ function Library.Window(self, Options)
 		colorSlider.BorderColor3 = Color3.fromRGB(27, 42, 53)
 		colorSlider.ClipsDescendants = true
 		colorSlider.Position = UDim2.fromOffset(168, 110)
-		colorSlider.Size = UDim2.fromOffset(158, 7)
+		colorSlider.Size = UDim2.fromOffset(158, Library.SliderBarHeight(7))
 		colorSlider.Parent = theholderclolpirkcer
 
 		local sliderUICorner = Instance.new("UICorner")		
@@ -5189,7 +5281,7 @@ local sliderPoint = Instance.new("ImageButton")
 	end
 
 	actualpalette.InputBegan:Connect(function(input)
-		if (input.UserInputType == Enum.UserInputType.MouseButton1) then
+		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
 			draggingPalette = true
 			local function updatePalettePosition(inputPos)
 				local relativeX = math.clamp((inputPos.X - actualpalette.AbsolutePosition.X) / actualpalette.AbsoluteSize.X, 0, 1)
@@ -5207,7 +5299,7 @@ local sliderPoint = Instance.new("ImageButton")
 	end)
 
 	colorSlider.InputBegan:Connect(function(input)
-		if (input.UserInputType == Enum.UserInputType.MouseButton1) then
+		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
 			draggingSlider = true
 			local function updateSliderPosition(inputPos)
 				local relativeX = math.clamp((inputPos.X - colorSlider.AbsolutePosition.X) / colorSlider.AbsoluteSize.X, 0, 1)
@@ -5223,7 +5315,7 @@ local sliderPoint = Instance.new("ImageButton")
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
-		if (input.UserInputType == Enum.UserInputType.MouseMovement) then
+		if (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 			if (draggingPalette) then
 				local relativeX = math.clamp((input.Position.X - actualpalette.AbsolutePosition.X) / actualpalette.AbsoluteSize.X, 0, 1)
 				local relativeY = math.clamp((input.Position.Y - actualpalette.AbsolutePosition.Y) / actualpalette.AbsoluteSize.Y, 0, 1)
@@ -5245,7 +5337,7 @@ local sliderPoint = Instance.new("ImageButton")
 	end)
 
 	UserInputService.InputEnded:Connect(function(input)
-		if (input.UserInputType == Enum.UserInputType.MouseButton1) then
+		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
 			draggingPalette = false
 			draggingSlider = false
 		end
@@ -5257,11 +5349,37 @@ local sliderPoint = Instance.new("ImageButton")
 
 		local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		if (ColorPicker.IsOpen) then
+			-- Close any open dropdown first
+			if (Library.CurrentOpenDropdown) then
+				Library.CurrentOpenDropdown.isOpen = false
+				Library.DropdownActive = false
+				if (Library.CurrentOpenDropdown.dropdownList) then
+					Library.CurrentOpenDropdown.dropdownList.Visible = false
+				end
+				Library.CurrentOpenDropdown = nil
+			end
+
+			-- Boost ZIndex to render above all other elements
+			theholderclolpirkcer.ZIndex = 50000
+			colorpickerframe.ZIndex = 50000
+			actualpalette.ZIndex = 50001
+			colorSlider.ZIndex = 50001
+			select.ZIndex = 50002
+			sliderPoint.ZIndex = 50002
+
 			TweenService:Create(uIStroke, tweenInfo, {
 				Color = Color3.fromRGB(38, 38, 36),
 				Transparency = 0,
 			}):Play()
 		else
+			-- Restore original ZIndex
+			theholderclolpirkcer.ZIndex = 50
+			colorpickerframe.ZIndex = ColorPicker.Zindex
+			actualpalette.ZIndex = 1
+			colorSlider.ZIndex = 1
+			select.ZIndex = 2
+			sliderPoint.ZIndex = 2
+
 			TweenService:Create(uIStroke, tweenInfo, {
 				Color = Color3.fromRGB(45, 45, 45),
 				Transparency = 0.6,
@@ -5276,7 +5394,7 @@ local sliderPoint = Instance.new("ImageButton")
 			return
 		end
 
-		if (ColorPicker.IsOpen and input.UserInputType == Enum.UserInputType.MouseButton1) then
+		if (ColorPicker.IsOpen and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)) then
 			if (not Library:IsMouseOverFrame(theholderclolpirkcer) and not Library:IsMouseOverFrame(box)) then
 				toggleColorPicker()
 			end
