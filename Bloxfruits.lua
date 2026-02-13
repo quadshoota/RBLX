@@ -2581,6 +2581,7 @@ function Library.Window(self, Options)
 			keybindcurrentframe.BackgroundTransparency = 1
 			keybindcurrentframe.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			keybindcurrentframe.BorderSizePixel = 0
+			keybindcurrentframe.AnchorPoint = Vector2.new(1, 0.5)
 			keybindcurrentframe.Position = UDim2.new(1, -35, 0.5, 0)
 			keybindcurrentframe.Size = UDim2.fromOffset(0, 21)
 			keybindcurrentframe.Parent = toggleElement
