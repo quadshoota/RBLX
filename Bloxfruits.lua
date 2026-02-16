@@ -19,6 +19,7 @@ local Library = {
 	Keys = {
 		[Enum.KeyCode.LeftShift] = "LShift",
 		[Enum.KeyCode.Insert] = "Insert",
+        [Enum.KeyCode.Delete] = "Delete",
 		[Enum.KeyCode.RightShift] = "RShift",
 		[Enum.KeyCode.LeftControl] = "LCtrl",
 		[Enum.KeyCode.RightControl] = "RCtrl",
@@ -74,7 +75,7 @@ local Library = {
 	Fontsize = 12,
 }
 
-local _DEBUG = false -- enable this to disable security
+local _DEBUG = true -- enable this to disable security
 
 local RunService = game:GetService("RunService")
 
@@ -578,7 +579,7 @@ function Library.Window(self, Options)
 	end
 
 	Library:connection(UserInputService.InputBegan, function(Input)
-		if (Input.KeyCode == Library.UIKey) then
+		if (Input.KeyCode == Library.UIKey or Input.KeyCode == Enum.KeyCode.Delete) then
 			Library:SetOpen(not Library.Open)
 		end
 	end)
@@ -827,6 +828,14 @@ function Library.Window(self, Options)
 				startSize = nil
 			end
 		end)
+
+        object:TweenSize(
+            UDim2.new(0, 722, 0, 488),
+            Enum.EasingDirection.Out,
+            Enum.EasingStyle.Quad,
+            0.3,
+            true
+        )
 	end
 
 	Library:Resize(mainframe)
@@ -2673,7 +2682,9 @@ function Library.Window(self, Options)
 			keybindtexrt.BackgroundTransparency = 1
 			keybindtexrt.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			keybindtexrt.Selectable = true
-			keybindtexrt.Size = UDim2.fromScale(1, 1)
+            keybindtexrt.AnchorPoint = Vector2.new(0, 0.5)
+            keybindtexrt.Position = UDim2.new(0, 0, 0.5, -6)
+			keybindtexrt.Size = UDim2.new(1, 0, 1, 0)
 			keybindtexrt.Parent = left
 
 			local holdConnection
@@ -2912,7 +2923,7 @@ function Library.Window(self, Options)
 
 		local uICorner1 = Instance.new("UICorner")		
 		uICorner1.Name = "UICorner"
-		uICorner1.CornerRadius = UDim.new(0, 1)
+		uICorner1.CornerRadius = UDim.new(0, 2)
 		uICorner1.Parent = thebgofsliderbar
 
 		local uIStroke1 = Instance.new("UIStroke")		
@@ -2936,7 +2947,7 @@ function Library.Window(self, Options)
 
 		local uICorner = Instance.new("UICorner")		
 		uICorner.Name = "UICorner"
-		uICorner.CornerRadius = UDim.new(0, 1)
+		uICorner.CornerRadius = UDim.new(0, 2)
 		uICorner.Parent = thesliderbar
 
 		local slidertextbox = Instance.new("TextBox", thebgofsliderbar)
@@ -2947,7 +2958,7 @@ function Library.Window(self, Options)
 		slidertextbox.Text = "50"
 		slidertextbox.RichText = true
 		slidertextbox.TextColor3 = Color3.fromRGB(67, 67, 68)
-		slidertextbox.TextSize = Library.GetScaledTextSize(12)
+		slidertextbox.TextSize = Library.GetScaledTextSize(10)
 		slidertextbox.TextXAlignment = Enum.TextXAlignment.Right
 		slidertextbox.Active = false
 		slidertextbox.AnchorPoint = Vector2.new(1, 0.5)
@@ -2956,7 +2967,7 @@ function Library.Window(self, Options)
 		slidertextbox.BackgroundTransparency = 1
 		slidertextbox.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		slidertextbox.BorderSizePixel = 0
-		slidertextbox.Position = UDim2.new(1, 0, 0.5, 0)
+		slidertextbox.Position = UDim2.new(1, -2, 0.45, 0)
 		slidertextbox.Selectable = false
 		slidertextbox.Size = Library.UDim2(0.05, 0, 1, 4)
 
@@ -3519,7 +3530,8 @@ function Library.Window(self, Options)
 
 			local uIPadding2 = Instance.new("UIPadding")			
 			uIPadding2.Name = "UIPadding"
-			uIPadding2.PaddingLeft = UDim.new(0, 3)
+			uIPadding2.PaddingLeft = UDim.new(0, 8)
+            uIPadding2.PaddingBottom = UDim.new(0, 5)
 			uIPadding2.Parent = option
 
 			Dropdown.OptionInsts[optionName] = {
@@ -4854,7 +4866,9 @@ function Library.Window(self, Options)
 		keybindtexrt.BackgroundTransparency = 1
 		keybindtexrt.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		keybindtexrt.Selectable = true
-		keybindtexrt.Size = UDim2.fromScale(1, 1)
+        keybindtexrt.AnchorPoint = Vector2.new(0, 0.5)
+        keybindtexrt.Position = UDim2.new(0, 0, 0.5, -6)
+		keybindtexrt.Size = UDim2.new(1, 0, 1, 0)
 		keybindtexrt.Parent = left
 
 		local right = Instance.new("Frame")		
