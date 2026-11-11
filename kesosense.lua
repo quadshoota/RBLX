@@ -22,7 +22,7 @@
 -- [1] SETUP
 ----------------------------------------------------------------------------------------------------
 
-local VERSION = "1.2.0"
+local VERSION = "1.2.1"
 
 local Environment = (getgenv and getgenv()) or _G
 local Previous = rawget(Environment, "kesosense")
@@ -1736,6 +1736,35 @@ function World:Search(startPosition, goalPosition, tolerance, token)
         via[nearest] = WALK
         size = HeapPush(priorities, keys, size, nearestDistance + weight * heuristic(nearest), nearest)
         seeds = 1
+    end
+
+    -- Nothing to stand on at this level: the agent is on a ledge too small to be a node (halfway
+    -- up a cave wall, say). Start with a drop to the ground below, nearest first, rather than
+    -- give up: NoStart left the caller with no way down at all.
+    -- The fall may be longer than MaxDrop here: being stranded is worse than a long drop.
+    if (seeds == 0) then
+        local escape = max(maxDrop, 40)
+
+        for ox = -1, 1 do
+            for oz = -1, 1 do
+                local nodes = self:Column(C, startColumn + ox * COLS + oz, sy - escape, sy - step)
+
+                if (nodes) then
+                    for _, key in ipairs(nodes) do
+                        local fall = sy - NY[key]
+
+                        if (fall > step and fall <= escape and (allowWater or NF[key] ~= F_WATER)) then
+                            local distance = sqrt((NX[key] - sx) ^ 2 + (NZ[key] - sz) ^ 2)
+
+                            g[key] = distance + fall * 0.25 + dropCost
+                            via[key] = DROP
+                            size = HeapPush(priorities, keys, size, g[key] + weight * heuristic(key), key)
+                            seeds += 1
+                        end
+                    end
+                end
+            end
+        end
     end
 
     if (seeds == 0) then
