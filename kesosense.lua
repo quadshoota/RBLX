@@ -22,7 +22,7 @@
 -- [1] SETUP
 ----------------------------------------------------------------------------------------------------
 
-local VERSION = "1.0.0"
+local VERSION = "1.1.0"
 
 local Environment = (getgenv and getgenv()) or _G
 local Previous = rawget(Environment, "kesosense")
@@ -236,45 +236,53 @@ local function HeapPop(priorities, keys, size)
     return top, size
 end
 
--- Every TrussPart in the place, kept current as parts stream in and out. Shared by all Worlds.
-local Trusses = { set = {}, version = 0, connections = nil }
+-- Every TrussPart and PathfindingModifier in the place, kept current as instances come and go
+-- (streaming, scripts adding zones). Shared by all Worlds; started on the first compute.
+local Tracked = { trusses = {}, modifiers = {}, version = 0, connections = nil }
 
-function Trusses:Start()
+function Tracked:Add(instance)
+    if (instance:IsA("TrussPart")) then
+        self.trusses[instance] = true
+        self.version += 1
+    elseif (instance:IsA("PathfindingModifier")) then
+        self.modifiers[instance] = true
+    end
+end
+
+function Tracked:Start()
     if (self.connections) then
         return
     end
 
     for _, instance in ipairs(Workspace:GetDescendants()) do
-        if (instance:IsA("TrussPart")) then
-            self.set[instance] = true
-        end
+        self:Add(instance)
     end
 
     self.connections =
     {
         Workspace.DescendantAdded:Connect(function(instance)
-            if (instance:IsA("TrussPart")) then
-                self.set[instance] = true
-                self.version += 1
-            end
+            self:Add(instance)
         end),
 
         Workspace.DescendantRemoving:Connect(function(instance)
-            if (self.set[instance]) then
-                self.set[instance] = nil
+            if (self.trusses[instance]) then
+                self.trusses[instance] = nil
                 self.version += 1
             end
+
+            self.modifiers[instance] = nil
         end),
     }
 end
 
-function Trusses:Stop()
+function Tracked:Stop()
     for _, connection in ipairs(self.connections or {}) do
         connection:Disconnect()
     end
 
     self.connections = nil
-    table.clear(self.set)
+    table.clear(self.trusses)
+    table.clear(self.modifiers)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -360,6 +368,7 @@ function World:Flush()
         colLo = {}, colHi = {}, colNodes = {},
         NX = {}, NY = {}, NZ = {}, NM = {}, NF = {},
         links = {},
+        diag = {},
         gaps = {},
     }
 end
@@ -459,6 +468,8 @@ function World:Measure()
     self.bodyH = max(height - clear, 1)
     self.box = Vector3.new(self.radius * 2, self.bodyH, self.radius * 2)
     self.lineBox = Vector3.new(self.radius * 2 + 0.5, self.bodyH, self.radius * 2)
+    -- Slimmer than the body so rising past a ledge face the node was nudged away from does not graze it.
+    self.shaftBox = Vector3.new(max(self.radius * 2 - 0.4, 0.5), self.bodyH, max(self.radius * 2 - 0.4, 0.5))
 
     -- Height window searched around a node for neighbours.
     local ramp = self.cell * 1.6 * self.tanSlope
@@ -496,6 +507,13 @@ function World:RefreshFilter()
         end
     end
 
+    -- PathfindingModifier.PassThrough means the same as it does to Roblox: not an obstacle.
+    for modifier in pairs(Tracked.modifiers) do
+        if (modifier.PassThrough and modifier.Parent) then
+            list[#list + 1] = modifier.Parent
+        end
+    end
+
     self.rayParams.FilterDescendantsInstances = list
     self.solidParams.FilterDescendantsInstances = list
 
@@ -505,9 +523,55 @@ function World:RefreshFilter()
     end
 end
 
+-- Cost volumes: parts carrying a PathfindingModifier whose Label has a cost in Costs, and that do
+-- not physically block (PassThrough, or not collidable, or not queryable). Read fresh for every
+-- search because scripts move them around (zones that follow enemies).
+function World:Zones()
+    local costs = self.labelCost
+
+    if (not costs) then
+        return nil
+    end
+
+    local zones = nil
+
+    for modifier in pairs(Tracked.modifiers) do
+        local cost = costs[modifier.Label]
+        local part = modifier.Parent
+
+        if (cost and part and part:IsA("BasePart") and (modifier.PassThrough or not part.CanCollide or not part.CanQuery)) then
+            local frame, half = part.CFrame, part.Size * 0.5
+            local right, up, look = frame.RightVector, frame.UpVector, frame.LookVector
+            local ex = abs(right.X) * half.X + abs(up.X) * half.Y + abs(look.X) * half.Z
+            local ey = abs(right.Y) * half.X + abs(up.Y) * half.Y + abs(look.Y) * half.Z
+            local ez = abs(right.Z) * half.X + abs(up.Z) * half.Y + abs(look.Z) * half.Z
+            local position = frame.Position
+
+            zones = zones or {}
+            zones[#zones + 1] = { position.X - ex, position.X + ex, position.Y - ey, position.Y + ey, position.Z - ez, position.Z + ez, cost }
+        end
+    end
+
+    return zones
+end
+
+-- The cost multiplier of the zones a point is inside of (1 when none).
+local function ZoneCost(zones, x, y, z)
+    local cost = 1
+
+    for _, zone in ipairs(zones) do
+        if (x >= zone[1] and x <= zone[2] and y >= zone[3] and y <= zone[4] and z >= zone[5] and z <= zone[6] and zone[7] > cost) then
+            cost = zone[7]
+        end
+    end
+
+    return cost
+end
+
 function World:Prepare(position)
     local now = clock()
 
+    Tracked:Start()
     self:Measure()
     self:RefreshFilter()
 
@@ -570,25 +634,58 @@ function World:GroundAt(x, y, z, up, down)
     return nil
 end
 
--- One side of a node: a slanted ray from the torso out and down. It tells a wall (returns its
--- distance), solid ground (false) and a drop (nil) apart in a single query.
-function World:Side(origin, x, z, y, dx, dz)
+-- One side of a node: a slanted ray from the torso out and down tells a wall (returns its
+-- distance), solid ground (false) and a drop (nil) apart. A level ray at head height catches what
+-- the slanted ray passes under: cave walls that lean over the floor, low ceilings, overhangs.
+function World:Side(origin, head, x, z, y, dx, dz)
     local reach = self.comfort
-    local hit = Workspace:Raycast(origin, Vector3.new(dx * reach, -(self.clear + 1.6), dz * reach), self.solidParams)
+    local solid = self.solidParams
+    local hit = Workspace:Raycast(origin, Vector3.new(dx * reach, -(self.clear + 1.6), dz * reach), solid)
+    local over = Workspace:Raycast(head, Vector3.new(dx * reach, 0, dz * reach), solid)
+    local result = nil
 
-    self.queries += 1
+    self.queries += 2
 
-    if (not hit) then
-        return nil
+    if (hit) then
+        local position = hit.Position
+
+        if (hit.Normal.Y >= 0.5 and position.Y <= y + self.step) then
+            result = false
+        else
+            result = sqrt((position.X - x) ^ 2 + (position.Z - z) ^ 2)
+        end
     end
 
-    local position = hit.Position
-
-    if (hit.Normal.Y >= 0.5 and position.Y <= y + self.step) then
-        return false
+    if (over and (not result or over.Distance < result)) then
+        result = over.Distance
     end
 
-    return sqrt((position.X - x) ^ 2 + (position.Z - z) ^ 2)
+    return result
+end
+
+local FIT_X = { 1, 0, -1, 0, 0.7071, 0.7071, -0.7071, -0.7071 }
+local FIT_Z = { 0, 1, 0, -1, 0.7071, -0.7071, 0.7071, -0.7071 }
+
+-- Does the body fit at a standing point? Level rays out from the centre line at knee and head
+-- height. The centre line is known to be open (headroom ray), so every ray starts in air: this
+-- stays reliable inside Terrain, where a box test is not (see Engine behaviour).
+function World:Fits(x, y, z)
+    local reach = self.radius - 0.1
+    local solid = self.solidParams
+
+    for level = 1, 2 do
+        local origin = Vector3.new(x, (level == 1) and (y + self.clear + 0.2) or (y + self.height - 0.3), z)
+
+        for d = 1, 8 do
+            self.queries += 1
+
+            if (Workspace:Raycast(origin, Vector3.new(FIT_X[d] * reach, 0, FIT_Z[d] * reach), solid)) then
+                return false
+            end
+        end
+    end
+
+    return true
 end
 
 -- Turns a ray hit into a node, or nil when nobody could stand there. Cached by key either way.
@@ -679,15 +776,20 @@ function World:Surface(C, column, cx, cz, x, y, z, hit)
     -- Nudge: push the node away from walls and drops so it sits where a body actually fits.
     if (flags == 0) then
         local origin = Vector3.new(x, y + self.clear + 0.6, z)
+        local head = Vector3.new(x, y + self.height - 0.3, z)
         local comfort = self.comfort
-        local tight, rim = false, false
+        local tight, rim, near = false, false, false
         local sx, sz = 0, 0
 
         for axis = 1, 2 do
             local dx, dz = (axis == 1) and 1 or 0, (axis == 1) and 0 or 1
-            local plus = self:Side(origin, x, z, y, dx, dz)
-            local minus = self:Side(origin, x, z, y, -dx, -dz)
+            local plus = self:Side(origin, head, x, z, y, dx, dz)
+            local minus = self:Side(origin, head, x, z, y, -dx, -dz)
             local shift = 0
+
+            if (plus or minus) then
+                near = true
+            end
 
             if (plus and minus) then
                 shift = (plus - minus) * 0.5
@@ -729,9 +831,21 @@ function World:Surface(C, column, cx, cz, x, y, z, hit)
             local nz = math.clamp(z + sz, cz - limit, cz + limit)
             local ny, ground = self:GroundAt(nx, y, nz, 1.5, 1.5)
 
+            -- The new spot needs its own headroom: in a cave the ground ray can start inside a
+            -- leaning wall, pass through it and find the floor of the hollow underneath.
             if (ny and abs(ny - y) <= 1 and ground.Material ~= Water and not (self.hazardSet and self.hazardSet[ground.Instance])) then
-                x, y, z = nx, ny, nz
+                self.queries += 1
+
+                if (not Workspace:Raycast(Vector3.new(nx, ny + 0.05, nz), Vector3.new(0, self.height, 0), self.solidParams)) then
+                    x, y, z = nx, ny, nz
+                end
             end
+        end
+
+        -- Something was close: make sure the body is not inside it. A node half inside a wall
+        -- sends the navigator into the wall, and link sweeps ignore what they start inside of.
+        if (near and not self:Fits(x, y, z)) then
+            return nil
         end
 
         if (tight) then
@@ -901,15 +1015,24 @@ function World:Link(C, a, b, axis)
                 lx, ly, lz = bx, by, bz
             end
 
-            self.queries += 1
+            -- The shaft above the lower node, up to the body at the higher level, must be open
+            -- both for jumping up and for dropping down. Without it a hillside node a few studs
+            -- above a cave links straight down through the cave roof. The ray starts on the
+            -- lower node's open centre line, so it is reliable inside Terrain.
+            self.queries += 2
 
-            local canJump = self.canJump and absRise <= self.jumpUp and not Workspace:Raycast(Vector3.new(lx, ly + self.clear, lz), Vector3.new(0, absRise + self.bodyH, 0), solid)
-            local canDrop = absRise <= self.maxDrop
+            local shaft = not Workspace:Raycast(Vector3.new(lx, ly + self.clear, lz), Vector3.new(0, absRise + self.bodyH, 0), solid)
+                and not Workspace:Blockcast(CFrame.new(lx, ly + self.clear + self.bodyH * 0.5 + 0.05, lz), self.shaftBox, Vector3.new(0, absRise, 0), solid)
 
-            if (canJump) then
-                code = canDrop and L_LEDGE or L_JUMP_ONLY
-            elseif (canDrop) then
-                code = L_DROP_ONLY
+            if (shaft) then
+                local canJump = self.canJump and absRise <= self.jumpUp
+                local canDrop = absRise <= self.maxDrop
+
+                if (canJump) then
+                    code = canDrop and L_LEDGE or L_JUMP_ONLY
+                elseif (canDrop) then
+                    code = L_DROP_ONLY
+                end
             end
         end
     end
@@ -940,6 +1063,63 @@ function World:WalkTo(C, key, d)
     end
 
     return nil
+end
+
+-- Can the body walk the diagonal between two nodes in corner-touching cells? Both ways round the
+-- corner being walkable says nothing about the diagonal itself: a rock that juts into the corner
+-- (every cave has them) sits right on that line. Cached per pair like Link.
+function World:Diagonal(C, a, b)
+    local columnA = (a - a % LAYERS) / LAYERS
+    local columnB = (b - b % LAYERS) / LAYERS
+
+    -- Canonical order: the node in the lower x cell first; one bit says which way z goes.
+    if (columnB < columnA) then
+        a, b = b, a
+        columnA, columnB = columnB, columnA
+    end
+
+    local diagKey = a * 2048 + (b % LAYERS) * 2 + ((columnB - columnA > COLS) and 1 or 0)
+    local known = C.diag[diagKey]
+
+    if (known ~= nil) then
+        return known
+    end
+
+    local NX, NY, NZ = C.NX, C.NY, C.NZ
+    local ax, ay, az = NX[a], NY[a], NZ[a]
+    local bx, by, bz = NX[b], NY[b], NZ[b]
+    local top = max(ay, by)
+    local height = top + self.clear + self.bodyH * 0.5 + 0.05
+    local from = Vector3.new(ax, height, az)
+    local to = Vector3.new(bx, height, bz)
+    local delta = to - from
+    local solid = self.solidParams
+    local ok = true
+
+    self.queries += 3
+
+    if (delta.Magnitude > 0.05) then
+        local rotation = CFrame.lookAt(Vector3.zero, delta)
+
+        ok = not Workspace:Blockcast(rotation + from, self.box, delta, solid) and not Workspace:Blockcast(rotation + to, self.box, -delta, solid)
+    end
+
+    -- Ground in the middle, where neither cardinal link looked.
+    if (ok) then
+        local mx, mz = (ax + bx) * 0.5, (az + bz) * 0.5
+        local hit = Workspace:Raycast(Vector3.new(mx, top + 1, mz), Vector3.new(0, min(ay, by) - self.step - top - 1.5, 0), self.rayParams)
+
+        ok = hit ~= nil and abs(hit.Position.Y - (ay + by) * 0.5) <= self.step and hit.Material ~= Water and not (self.hazardSet and self.hazardSet[hit.Instance])
+    end
+
+    if (ok and self.hazardParams) then
+        self.queries += 1
+        ok = not Workspace:Raycast(from, delta, self.hazardParams)
+    end
+
+    C.diag[diagKey] = ok
+
+    return ok
 end
 
 -- Horizontal distance a jump covers when it lands `rise` studs above the take-off.
@@ -1052,12 +1232,10 @@ end
 
 -- Upright trusses by the column they stand in, rebuilt per cache generation.
 function World:TrussMap(C)
-    if (C.trussMap == nil or C.trussVersion ~= Trusses.version) then
-        Trusses:Start()
-
+    if (C.trussMap == nil or C.trussVersion ~= Tracked.version) then
         local map = false
 
-        for truss in pairs(Trusses.set) do
+        for truss in pairs(Tracked.trusses) do
             if (truss.CanCollide and truss.CFrame.UpVector.Y > 0.9) then
                 local position = truss.Position
                 local column = self:ColumnOf(position.X, position.Z)
@@ -1069,7 +1247,7 @@ function World:TrussMap(C)
         end
 
         C.trussMap = map
-        C.trussVersion = Trusses.version
+        C.trussVersion = Tracked.version
     end
 
     return C.trussMap
@@ -1333,6 +1511,7 @@ function World:WalkLine(x1, y1, z1, x2, y2, z2, allowWater, maxMult)
     local ray, solid, hazards, set = self.rayParams, self.solidParams, self.hazardParams, self.hazardSet
     local avoid = (self.avoidCount > 0) and self.avoid or nil
     local materialCost = self.materialCost
+    local zones = self.lineZones
 
     for index = 1, steps do
         local qx, qz = x1 + sx * index, z1 + sz * index
@@ -1367,6 +1546,10 @@ function World:WalkLine(x1, y1, z1, x2, y2, z2, allowWater, maxMult)
         end
 
         if (avoid and avoid[self:ColumnOf(qx, qz)]) then
+            return false
+        end
+
+        if (zones and ZoneCost(zones, qx, qy + 2, qz) > (maxMult or 1)) then
             return false
         end
 
@@ -1413,6 +1596,8 @@ function World:Search(startPosition, goalPosition, tolerance, token)
     local jumpCost, dropCost, avoidCost = options.JumpCost, options.DropCost, options.AvoidCost
     local weight = self.hWeight
     local avoid = self.avoid
+    local zones = self:Zones()
+    local zoneOf = {}
 
     local result =
     {
@@ -1444,7 +1629,8 @@ function World:Search(startPosition, goalPosition, tolerance, token)
 
     -- Goal: the ground under it, and the node of its cell when there is one.
     local gx, gz = goalPosition.X, goalPosition.Z
-    local groundGoal = self:GroundAt(gx, goalPosition.Y, gz, 1.5, 14)
+    -- (Goals are often a part's centre or a point slightly inside the ground: look up as well.)
+    local groundGoal = self:GroundAt(gx, goalPosition.Y, gz, 1.5, 14) or self:GroundAt(gx, goalPosition.Y, gz, 8, 0)
     local gy = groundGoal or goalPosition.Y
     local goalColumn = self:ColumnOf(gx, gz)
     local goalKey = nil
@@ -1528,6 +1714,21 @@ function World:Search(startPosition, goalPosition, tolerance, token)
 
         cost *= NM[to]
 
+        if (zones) then
+            local zone = zoneOf[to]
+
+            if (not zone) then
+                zone = ZoneCost(zones, NX[to], NY[to] + 2, NZ[to])
+                zoneOf[to] = zone
+            end
+
+            if (zone == huge) then
+                return
+            end
+
+            cost *= zone
+        end
+
         if (self.avoidCount > 0) then
             local layer = to % LAYERS
 
@@ -1604,7 +1805,7 @@ function World:Search(startPosition, goalPosition, tolerance, token)
                     if (c) then
                         local corner = self:WalkTo(C, b, dzDir)
 
-                        if (corner and corner == self:WalkTo(C, c, dxDir)) then
+                        if (corner and corner == self:WalkTo(C, c, dxDir) and self:Diagonal(C, a, corner)) then
                             relax(a, corner, WALK, sqrt((NX[corner] - ax) ^ 2 + (NZ[corner] - az) ^ 2) + abs(NY[corner] - ay) * 0.5)
                         end
                     end
@@ -1670,6 +1871,13 @@ function World:Search(startPosition, goalPosition, tolerance, token)
             if (groundGoal and flat <= near and abs(NY[a] - gy) <= step + 1 and self:WalkLine(NX[a], NY[a], NZ[a], gx, gy, gz, allowWater)) then
                 reached = a
                 goalKey = a
+                break
+            end
+
+            -- A goal with no ground under it (mid-air, inside something): right beside it is
+            -- as reached as it will ever get.
+            if (not groundGoal and flat <= near and abs(NY[a] - gy) <= self.height + 2) then
+                reached = a
                 break
             end
 
@@ -1744,6 +1952,7 @@ function World:Search(startPosition, goalPosition, tolerance, token)
     end
 
     result.Points = points
+    result.Zones = zones
     result.AllowWater = allowWater
     result.Status = reached and Status.Success or Status.ClosestNoPath
 
@@ -1869,6 +2078,14 @@ end
 -- `tolerance` (studs) accepts any reachable point that close to the goal, for goals that are
 -- inside something solid (a tree, an ore, an NPC).
 function Path:ComputeAsync(start, goal, tolerance)
+    -- Debounce: the same question again within a tenth of a second gets the same answer. Callers
+    -- written against Roblox's slow compute tend to ask every frame once the answer is instant.
+    local now = clock()
+
+    if (self.askedAt and now - self.askedAt < 0.1 and tolerance == self.askedTolerance and (start - self.askedStart).Magnitude < 1 and (goal - self.askedGoal).Magnitude < 1) then
+        return self.Status == Status.Success
+    end
+
     if (self.token) then
         self.token.cancelled = true
     end
@@ -1902,7 +2119,12 @@ function Path:ComputeAsync(start, goal, tolerance)
     if (result.Points) then
         local before = world.queries
         local smoothStart = clock()
+        -- Smoothing must not cut through a zone the search paid to go around.
+        world.lineZones = result.Zones
+
         local points = world:Smooth(result.Points, result.AllowWater)
+
+        world.lineZones = nil
 
         result.Stats.Queries += world.queries - before
         result.Stats.Work += clock() - smoothStart
@@ -1931,6 +2153,10 @@ function Path:ComputeAsync(start, goal, tolerance)
     self.Stats = result.Stats
     self.Stats.Length = length
     self.Goal = goal
+    self.askedAt = clock()
+    self.askedStart = start
+    self.askedGoal = goal
+    self.askedTolerance = tolerance
 
     if (Debug.Enabled) then
         Debug:Search(self, result)
@@ -2791,7 +3017,7 @@ function kesosense:Unload()
     end
 
     table.clear(Worlds)
-    Trusses:Stop()
+    Tracked:Stop()
 
     if (rawget(Environment, "kesosense") == self) then
         Environment.kesosense = nil
