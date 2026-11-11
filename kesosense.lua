@@ -22,7 +22,7 @@
 -- [1] SETUP
 ----------------------------------------------------------------------------------------------------
 
-local VERSION = "1.1.0"
+local VERSION = "1.2.0"
 
 local Environment = (getgenv and getgenv()) or _G
 local Previous = rawget(Environment, "kesosense")
@@ -38,6 +38,7 @@ local Workspace = game:GetService("Workspace")
 local Action = Enum.PathWaypointAction
 local Status = Enum.PathStatus
 local Water = Enum.Material.Water
+local Terrain = Workspace.Terrain
 
 local floor, ceil, abs, sqrt, max, min, huge = math.floor, math.ceil, math.abs, math.sqrt, math.max, math.min, math.huge
 local clock = os.clock
@@ -688,6 +689,31 @@ function World:Fits(x, y, z)
     return true
 end
 
+-- Is there floor around a point? Short rays down at four points a little inside the body's
+-- edge must find walkable ground within a step; at least three of them. A bump on a rock face has
+-- rock above it on one side (the ray starts inside Terrain and finds nothing) and a drop on the
+-- other. A ramp up to MaxSlope still passes.
+function World:Footing(x, y, z)
+    local reach = self.radius * 0.8
+    local step = self.step
+    local solid = self.solidParams
+    local count = 0
+
+    for d = 1, 4 do
+        local hit = Workspace:Raycast(Vector3.new(x + DIR_X[d] * reach, y + step + 0.5, z + DIR_Z[d] * reach), Vector3.new(0, -(step * 2 + 1), 0), solid)
+
+        self.queries += 1
+
+        if (hit and hit.Normal.Y >= self.minNormalY) then
+            count += 1
+        elseif (d - count >= 2) then
+            return false
+        end
+    end
+
+    return true
+end
+
 -- Turns a ray hit into a node, or nil when nobody could stand there. Cached by key either way.
 function World:Surface(C, column, cx, cz, x, y, z, hit)
     local flags = 0
@@ -845,6 +871,12 @@ function World:Surface(C, column, cx, cz, x, y, z, hit)
         -- Something was close: make sure the body is not inside it. A node half inside a wall
         -- sends the navigator into the wall, and link sweeps ignore what they start inside of.
         if (near and not self:Fits(x, y, z)) then
+            return nil
+        end
+
+        -- Steep Terrain is built from little stair-like facets, and the ones facing up pass the
+        -- slope test. Standing on one means being stuck halfway up a cave wall.
+        if ((near or rim) and hit.Instance == Terrain and not self:Footing(x, y, z)) then
             return nil
         end
 
@@ -1683,7 +1715,10 @@ function World:Search(startPosition, goalPosition, tolerance, token)
                             nearest, nearestDistance = key, distance
                         end
 
-                        if (self:WalkLine(sx, sy, sz, NX[key], NY[key], NZ[key], allowWater)) then
+                        -- Ground cost is the search's business; this only asks "can I get there".
+                        -- With the default limit a costed floor (Lunacy prices Rock at 6) failed
+                        -- every seed in a rock cave.
+                        if (self:WalkLine(sx, sy, sz, NX[key], NY[key], NZ[key], allowWater, huge)) then
                             g[key] = distance
                             via[key] = WALK
                             size = HeapPush(priorities, keys, size, distance + weight * heuristic(key), key)
@@ -1868,7 +1903,7 @@ function World:Search(startPosition, goalPosition, tolerance, token)
                 break
             end
 
-            if (groundGoal and flat <= near and abs(NY[a] - gy) <= step + 1 and self:WalkLine(NX[a], NY[a], NZ[a], gx, gy, gz, allowWater)) then
+            if (groundGoal and flat <= near and abs(NY[a] - gy) <= step + 1 and self:WalkLine(NX[a], NY[a], NZ[a], gx, gy, gz, allowWater, huge)) then
                 reached = a
                 goalKey = a
                 break
@@ -1946,7 +1981,7 @@ function World:Search(startPosition, goalPosition, tolerance, token)
     if (reached and reached == goalKey and groundGoal) then
         local tail = points[#points]
 
-        if (sqrt((tail.x - gx) ^ 2 + (tail.z - gz) ^ 2) > 0.5 and self:WalkLine(tail.x, tail.y, tail.z, gx, gy, gz, allowWater)) then
+        if (sqrt((tail.x - gx) ^ 2 + (tail.z - gz) ^ 2) > 0.5 and self:WalkLine(tail.x, tail.y, tail.z, gx, gy, gz, allowWater, huge)) then
             points[#points + 1] = { x = gx, y = gy, z = gz, kind = WALK, mult = 1 }
         end
     end
