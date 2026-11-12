@@ -22,7 +22,7 @@
 -- [1] SETUP
 ----------------------------------------------------------------------------------------------------
 
-local VERSION = "1.2.1"
+local VERSION = "1.3.0"
 
 local Environment = (getgenv and getgenv()) or _G
 local Previous = rawget(Environment, "kesosense")
@@ -1610,7 +1610,35 @@ end
 -- each was reached; Path turns those into waypoints.
 ----------------------------------------------------------------------------------------------------
 
+-- Cost multipliers above this are what a relaxed search clamps them to.
+local RELAXED = 2
+
+-- A goal that sits in (or behind) heavily costed ground makes A* expand everything cheaper first:
+-- with a 30x zone over a cave that is the whole map, the budget runs out, and the "closest point"
+-- that comes back is wherever the flood happened to get nearest (the plateau above the cave, the
+-- far side of a wall). When that happens the search runs again with the multipliers clamped, so
+-- costed ground is still disliked but no longer worth any detour. The verdict is remembered for
+-- a few seconds because callers replan about once a second.
 function World:Search(startPosition, goalPosition, tolerance, token)
+    local memo = self.relaxedFor
+    local direct = memo ~= nil and clock() < memo.expires and (goalPosition - memo.goal).Magnitude < 6
+    local result = self:Explore(startPosition, goalPosition, tolerance, token, direct and RELAXED or huge)
+
+    if (not direct and result.Reason == "Budget" and result.Costed) then
+        local first = result.Stats
+
+        self.relaxedFor = { goal = goalPosition, expires = clock() + 3 }
+        result = self:Explore(startPosition, goalPosition, tolerance, token, RELAXED)
+
+        for name, value in pairs(first) do
+            result.Stats[name] += value
+        end
+    end
+
+    return result
+end
+
+function World:Explore(startPosition, goalPosition, tolerance, token, cap)
     local began = clock()
     local slice = began
     local work = 0
@@ -1776,7 +1804,7 @@ function World:Search(startPosition, goalPosition, tolerance, token)
             return
         end
 
-        cost *= NM[to]
+        local mult = NM[to]
 
         if (zones) then
             local zone = zoneOf[to]
@@ -1790,8 +1818,15 @@ function World:Search(startPosition, goalPosition, tolerance, token)
                 return
             end
 
-            cost *= zone
+            mult *= zone
         end
+
+        if (mult > RELAXED) then
+            result.Costed = true
+            mult = min(mult, cap)
+        end
+
+        cost *= mult
 
         if (self.avoidCount > 0) then
             local layer = to % LAYERS
@@ -1916,7 +1951,9 @@ function World:Search(startPosition, goalPosition, tolerance, token)
 
             local hx, hz = NX[a] - gx, NZ[a] - gz
             local flat = sqrt(hx * hx + hz * hz)
-            local h = heuristic(a)
+            -- Closest for a partial path: height counts for more than it does in the heuristic,
+            -- or the spot straight above or below the goal on another level wins.
+            local h = flat + abs(NY[a] - gy) * 1.5
 
             if (h < bestH) then
                 best, bestH = a, h
@@ -2004,7 +2041,7 @@ function World:Search(startPosition, goalPosition, tolerance, token)
             points[#points + 1] = { x = edge.tx, y = edge.ty, z = edge.tz, kind = WALK, mult = 1 }
         end
 
-        points[#points + 1] = { x = NX[node], y = NY[node], z = NZ[node], kind = kind, mult = NM[node] }
+        points[#points + 1] = { x = NX[node], y = NY[node], z = NZ[node], kind = kind, mult = NM[node] * (zoneOf[node] or 1) }
     end
 
     if (reached and reached == goalKey and groundGoal) then
@@ -2041,10 +2078,14 @@ function World:Smooth(points, allowWater)
         if (points[stop].kind == WALK and stop > anchor + 1) then
             local from = points[anchor]
             local limit = min(stop, anchor + 30)
+            local mults = {}
             local mult = 1
 
+            -- A shortcut may cross ground as costly as what the route up to that point crossed,
+            -- and no more: a route that skirts a zone before entering it keeps skirting it.
             for index = anchor, limit do
                 mult = max(mult, points[index].mult)
+                mults[index] = mult
             end
 
             -- Furthest point visible from the anchor, by bisection.
@@ -2054,7 +2095,7 @@ function World:Smooth(points, allowWater)
                 local mid = ceil((lo + hi) / 2)
                 local target = points[mid]
 
-                if (self:WalkLine(from.x, from.y, from.z, target.x, target.y, target.z, allowWater, mult)) then
+                if (self:WalkLine(from.x, from.y, from.z, target.x, target.y, target.z, allowWater, mults[mid])) then
                     lo = mid
                 else
                     hi = mid - 1
