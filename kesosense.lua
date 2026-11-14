@@ -72,7 +72,8 @@ local Defaults =
     StepHeight = nil,           -- tallest rise walked without jumping
     MaxSlope = 50,              -- degrees; steeper ground needs a jump or is avoided
     AgentCanJump = true,
-    JumpHeight = nil,           -- tallest ledge to jump onto; nil = 80% of the humanoid's real apex
+    AgentCanGapJump = false,    -- jump across open air between platforms; needs AgentCanJump
+    JumpHeight = nil,          -- tallest ledge to jump onto; nil = 80% of the humanoid's real apex
     JumpSafety = 0.9,           -- fraction of the theoretical jump distance trusted for gap jumps
     MaxDrop = 12,               -- tallest ledge to walk off
     AgentCanClimb = true,       -- use TrussParts as ladders
@@ -1447,7 +1448,7 @@ function World:Gaps(C, a)
         result = self:Climbs(C, a, nil) or false
     end
 
-    if (self.canJump) then
+    if (self.canJump and self.options.AgentCanGapJump) then
         local NX, NY, NZ = C.NX, C.NY, C.NZ
         local ax, ay, az = NX[a], NY[a], NZ[a]
         local layer = a % LAYERS
